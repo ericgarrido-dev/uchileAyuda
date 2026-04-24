@@ -38,6 +38,7 @@ export function LoginScreen({
   useEffect(() => {
     GoogleSignin.configure({
       webClientId: ENV.GOOGLE_CLIENT_ID,
+      iosClientId: ENV.GOOGLE_CLIENT_ID,
     });
   }, []);
 
