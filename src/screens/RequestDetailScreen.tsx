@@ -53,6 +53,8 @@ export default function RequestDetailScreen() {
     );
   }
 
+  const [commentType, setCommentType] = useState<"publico" | "interno">("publico");
+
   /* ---------------- PICK IMAGES ---------------- */
   const openImagePicker = () => {
     launchImageLibrary(
@@ -197,21 +199,30 @@ export default function RequestDetailScreen() {
           <View style={styles.row}>
             <Icon name="user" size={14} color="#64748b" style={{ marginRight: 6 }} />
             <Text style={styles.text}>
-              Asignado a: {request?.assigned_user?.name ?? "Sin asignar"}
+              <Text style={styles.label}>Asignado a: </Text>
+              <Text style={styles.value}>
+                {request?.assigned_user?.name ?? "Sin asignar"}
+              </Text>
             </Text>
           </View>
 
           <View style={styles.row}>
             <Icon name="users" size={14} color="#64748b" style={{ marginRight: 6 }} />
             <Text style={styles.text}>
-              Grupo: {request?.assigned_group?.name ?? "Sin grupo"}
+              <Text style={styles.label}>Grupo: </Text>
+              <Text style={styles.value}>
+                {request?.assigned_group?.name ?? "Sin grupo"}
+              </Text>
             </Text>
           </View>
 
           <View style={styles.row}>
             <Icon name="tag" size={14} color="#64748b" style={{ marginRight: 6 }} />
             <Text style={styles.text}>
-              Creación: {formatDate(request.created_at) || "Sin fecha"}
+              <Text style={styles.label}>Creación: </Text>
+              <Text style={styles.value}>
+                Creación: {formatDate(request.created_at) || "Sin fecha"}
+              </Text>
             </Text>
           </View>
 
@@ -252,19 +263,31 @@ export default function RequestDetailScreen() {
             {/* CHECKBOX */}
             <TouchableOpacity
               style={styles.checkbox}
-              onPress={() => setIsChecked(!isChecked)}
+              onPress={() =>
+                setCommentType(
+                  commentType === "publico" ? "interno" : "publico"
+                )
+              }
             >
               <Icon
-                name={isChecked ? "check-square" : "square"}
+                name={commentType === "interno" ? "check-square" : "square"}
                 size={18}
-                color={isChecked ? "#2563eb" : "#64748b"}
+                color={commentType === "interno" ? "#2563eb" : "#64748b"}
               />
-              <Text style={styles.internalText}>Interno</Text>
             </TouchableOpacity>
 
+            {/* TEXTO ESTADO */}
             <View style={styles.internalComment}>
-              <Icon name="lock" size={14} color="#64748b" />
-              <Text style={styles.internalText}>Comentario inteeerno</Text>
+              <Icon
+                name={commentType === "interno" ? "lock" : "globe"}
+                size={14}
+                color="#64748b"
+              />
+              <Text style={styles.internalText}>
+                {commentType === "interno"
+                  ? "Comentario interno"
+                  : "Comentario público"}
+              </Text>
             </View>
 
             {/* ATTACH */}
@@ -274,12 +297,11 @@ export default function RequestDetailScreen() {
               </TouchableOpacity>
             </View>
 
-
-
           </View>
 
+          {/* TEXTO ABAJO */}
           <Text style={styles.helperText}>
-            Puedes adjuntar varias imáqqqgenes
+            Puedes adjuntar varios archivos (máx. 10 MB c/u)
           </Text>
         </View>
 
@@ -370,7 +392,7 @@ const styles = StyleSheet.create({
   sub: { fontSize: 12, color: "#64748b", marginBottom: 10 },
 
   row: { flexDirection: "row", gap: 6, alignItems: "center", marginBottom: 10 },
-  text: { fontSize: 12, color: "#334155" },
+  text: { fontSize: 12, color: "#000000" },
 
   input: {
     borderWidth: 1,
@@ -478,5 +500,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+  },
+
+  label: {
+    color: "#64748b", // gris suave para el texto fijo
+  },
+
+  value: {
+    color: "#0f172a", // más oscuro para el nombre
+    fontWeight: "500",
   },
 });
