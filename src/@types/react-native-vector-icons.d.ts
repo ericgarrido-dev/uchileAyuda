@@ -15,3 +15,18 @@ declare module 'react-native-vector-icons/Feather' {
   const Feather: ComponentType<IconProps>;
   export default Feather;
 }
+
+// AntDesign (para icono de Google)
+declare module 'react-native-vector-icons/AntDesign' {
+  import { ComponentType } from 'react';
+  import { TextProps } from 'react-native';
+
+  type IconProps = {
+    name: string;
+    size?: number;
+    color?: string;
+  } & TextProps;
+
+  const AntDesign: ComponentType<IconProps>;
+  export default AntDesign;
+}

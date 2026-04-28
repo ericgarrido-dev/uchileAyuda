@@ -13,6 +13,7 @@ interface RequestCardProps {
   createdAt: string;
   slaStatus: "ok" | "warning" | "danger";
   slaLabel: string;
+  slaCommen: string;
   onClick: () => void;
 }
 
@@ -27,6 +28,7 @@ export function RequestCard({
   createdAt,
   slaStatus,
   slaLabel,
+  slaCommen,
   onClick,
 }: RequestCardProps) {
   return (
@@ -171,31 +173,34 @@ const styles = StyleSheet.create({
 
   tags: {
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 6,
-    marginBottom: 10,
+    flexWrap: "wrap",
   },
 
   tag: {
+    flex: 1,              // 🔥 todos ocupan el mismo ancho
     fontSize: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 4,
     borderRadius: 6,
-    overflow: "hidden",
+    textAlign: "center",
+    textTransform: 'uppercase',
   },
 
   category: {
+    flex: 1,              // 🔥 igual que los otros
     fontSize: 10,
     color: "#64748b",
     backgroundColor: "#f1f5f9",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 4,
     borderRadius: 6,
+    textAlign: "center",
   },
 
   footer: {
+    marginTop: 10,
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center", // 👈 clave
   },
 
   leftFooter: {

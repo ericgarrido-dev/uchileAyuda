@@ -7,29 +7,23 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from "react-native";
 
-import Icon from "react-native-vector-icons/Feather";
+import AntDesign from 'react-native-vector-icons/AntDesign';
 import { RutInput } from "./RutInput";
-
-import {
-  GoogleSignin,
-  statusCodes,
-} from "@react-native-google-signin/google-signin";
-
+import { GoogleSignin, statusCodes, } from "@react-native-google-signin/google-signin";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ENV } from "../config/env";
+import api from "../services/api";
+import { ErrorBadge } from '../components/ErrorBadge';
 
 interface LoginScreenProps {
   onLogin: (payload: any) => void;
-  onRegister: () => void;
-  onForgotPassword: () => void;
 }
 
 export function LoginScreen({
   onLogin,
-  onRegister,
-  onForgotPassword,
 }: LoginScreenProps) {
   const [rut, setRut] = useState("");
   const [rutValid, setRutValid] = useState(false);
@@ -54,33 +48,26 @@ export function LoginScreen({
       await GoogleSignin.hasPlayServices();
       const result = await GoogleSignin.signIn();
 
-      const idToken = result?.idToken ?? result?.data?.idToken;
-
-      console.log("📥 TOKEN1:", idToken);  
+      const idToken = result.idToken;
+      console.log("📥 TOKEN1:", idToken);
 
       if (!idToken) {
         setError("Error autenticación Google");
         return;
       }
 
-      const loginResponse = await fetch(
-        "https://devticket.uchilefau.cl/api/mobile/auth/google",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id_token: idToken,
-            rut: rut,
-          }),
-        }
-      );
+      // Realizamos la solicitud a la API con Axios
+      const loginResponse = await api.post('/mobile/auth/google', {
+        id_token: idToken,
+        rut: rut,
+      });
 
-      const loginData = await loginResponse.json();
-
+      const loginData = loginResponse.data;
       console.log("📥 LOGIN RESPONSE:", loginData);
 
-      if (!loginResponse.ok) {
-        setError(loginData?.message || "Error login");
+      // Verificar si hay un error en la respuesta
+      if (!loginData) {
+        setError("Respuesta inválida del servidor");
         return;
       }
 
@@ -95,29 +82,27 @@ export function LoginScreen({
       }
 
       /* ---------------- SINGLE TENANT ---------------- */
-
-      const token =
-        loginData?.token ||
-        loginData?.access_token ||
-        loginData?.data?.token;
+      const token = loginData?.token ?? loginData?.access_token;
 
       if (!token) {
         setError("No se recibió token");
         return;
       }
 
-      await AsyncStorage.setItem("token", token);
+      try {
+        await AsyncStorage.setItem("token", token);
+      } catch {
+        console.warn("No se pudo guardar el token");
+      }
 
-      const meResponse = await fetch(
-        "https://devticket.uchilefau.cl/api/mobile/me",
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const meResponse = await api.get('/mobile/me', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-      const meData = await meResponse.json();
+      const meData = meResponse.data;
+      console.log("📥 ME:", meData);
 
       onLogin({
         requiresTenantSelection: false,
@@ -131,7 +116,11 @@ export function LoginScreen({
 
       if (e?.code === statusCodes.SIGN_IN_CANCELLED) return;
 
-      setError("Error login Google");
+      if (e?.response?.data?.message) {
+        setError(e.response.data.message);
+      } else {
+        setError("Error login Google");
+      }
     }
   };
 
@@ -143,10 +132,13 @@ export function LoginScreen({
       <ScrollView contentContainerStyle={styles.scrollContainer}>
 
         <View style={styles.logoContainer}>
-          <View style={styles.logo}>
-            <Icon name="home" size={32} color="#fff" />
+          <View >
+            <Image
+              source={require("../../assets/logo/ic_launcher.png")}
+              style={styles.logoImage}
+            />
           </View>
-          <Text style={styles.title}>ayuda.uchile.cl</Text>
+          <Text style={styles.title}>Uchile Ayuda</Text>
           <Text style={styles.subtitle}>
             Sistema de gestión institucional
           </Text>
@@ -165,25 +157,18 @@ export function LoginScreen({
             }}
           />
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {error ? <ErrorBadge message={error} /> : null}
 
           <TouchableOpacity
             style={styles.googleButton}
             onPress={handleGoogleLogin}
           >
-            <Icon name="chrome" size={18} color="#000" />
+            <AntDesign name="google" size={20} color="#DB4437" />
             <Text style={styles.googleText}>
               Continuar con Google
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={onForgotPassword}>
-            <Text style={styles.link}>¿Olvidaste tu contraseña?</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={onRegister}>
-            <Text style={styles.link}>Registrarse</Text>
-          </TouchableOpacity>
         </View>
 
         <Text style={styles.footer}>
@@ -195,12 +180,15 @@ export function LoginScreen({
 }
 
 /* ---------------- STYLES ---------------- */
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f0f0f0" },
   scrollContainer: { padding: 16, alignItems: "center" },
 
-  logoContainer: { alignItems: "center", marginBottom: 20 },
+  logoContainer: {
+    alignItems: "center",
+    padding: 20,
+  },
+
   logo: {
     width: 60,
     height: 60,
@@ -247,4 +235,10 @@ const styles = StyleSheet.create({
   error: { color: "red", marginTop: 10 },
 
   footer: { marginTop: 20, fontSize: 10, color: "#999" },
+
+  logoImage: {
+    width: 40,
+    height: 40,
+    resizeMode: "contain",
+  },
 });

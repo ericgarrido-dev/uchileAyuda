@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 
 import Icon from "react-native-vector-icons/Feather";
@@ -25,6 +26,7 @@ export default function DashboardScreen() {
 
   const [tickets, setTickets] = useState<any[]>([]);
   const [tenant, setTenant] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // ✅ FIX: estado real para métricas
   const [metrics, setMetrics] = useState({
@@ -105,6 +107,13 @@ export default function DashboardScreen() {
     return `${day}-${month}-${year}`;
   };
 
+  // Función para manejar el refresh
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await loadTickets();  // Actualiza los comentarios
+    setIsRefreshing(false);
+  };
+
   return (
     <View style={styles.container}>
 
@@ -123,7 +132,13 @@ export default function DashboardScreen() {
 
       </Animatable.View>
 
-      <ScrollView contentContainerStyle={styles.contentContainer}>
+      <ScrollView contentContainerStyle={styles.contentContainer} refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
+          colors={["#2563eb"]}
+        />
+      }>
 
         {/* METRICS */}
         <View style={styles.metricsContainer}>
@@ -172,6 +187,7 @@ export default function DashboardScreen() {
                   createdAt={formatDate(request.created_at)}
                   slaStatus="ok"
                   slaLabel="--"
+                  slaCommen={request.sla}
                   onClick={() => handleRequestClick(request)}
                 />
               </Animatable.View>
@@ -255,7 +271,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
-   metricCard: {
+  metricCard: {
     flex: 1,
     backgroundColor: '#fff',
     padding: 14,

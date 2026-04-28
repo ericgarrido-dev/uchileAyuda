@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { View, TextInput, Text, StyleSheet } from "react-native";
 import Icon from "react-native-vector-icons/Feather";
 import { formatRut, validateAndFormat, RutValidationResult } from "../lib/rutValidator";
+import { ErrorBadge, ValidBadge } from "../components/ErrorBadge";
 
 interface RutInputProps {
   value: string;
@@ -89,17 +90,11 @@ export function RutInput({
           )}
 
           {touched && value && !validation.isValid && validation.message && (
-            <View style={styles.validationRow}>
-              <Icon name="x-circle" size={14} color="#dc2626" />
-              <Text style={styles.errorText}>{validation.message}</Text>
-            </View>
+            <ErrorBadge message={validation.message} />
           )}
 
           {touched && validation.isValid && (
-            <View style={styles.validationRow}>
-              <Icon name="check-circle" size={14} color="#16a34a" />
-              <Text style={styles.successText}>RUT válido</Text>
-            </View>
+            <ValidBadge />
           )}
         </View>
       )}

@@ -7,14 +7,17 @@ import {
   StyleSheet,
   TextInput,
   Image,
+  RefreshControl,
 } from "react-native";
 
 import Icon from "react-native-vector-icons/Feather";
 import * as Animatable from "react-native-animatable";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { launchImageLibrary } from "react-native-image-picker";
+import { launchCamera, launchImageLibrary } from "react-native-image-picker";
 import { useAuth } from "../context/AuthContext";
+import ModalFinalizarScreen from "./ModalFinalizarScreen";
+import ModalAnularScreen from "./ModalAnularScreen";
 
 export default function RequestDetailScreen() {
   const navigation = useNavigation<any>();
@@ -22,13 +25,16 @@ export default function RequestDetailScreen() {
   const { logout } = useAuth();
 
   const request = route.params?.request;
-
   const [comment, setComment] = useState("");
   const [images, setImages] = useState<any[]>([]);
   const [isChecked, setIsChecked] = useState(false);
   const [tenant, setTenant] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [comments, setComments] = useState([]); // 👈 NUEVO
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalVisibleAnular, setModalVisibleAnular] = useState(false);
 
   /* ---------------- LOAD TENANT ---------------- */
   useEffect(() => {
@@ -38,12 +44,20 @@ export default function RequestDetailScreen() {
 
       setTenant(tenantStored);
       setToken(tokenStore);
-
     };
-
 
     loadTenant();
   }, []);
+
+  useEffect(() => {
+    const load = async () => {
+      if (request?.id && token) {
+        await loadComments();
+      }
+    };
+
+    load();
+  }, [request, token]);
 
   if (!request) {
     return (
@@ -66,11 +80,55 @@ export default function RequestDetailScreen() {
       (res) => {
         if (res.didCancel || res.errorCode) return;
 
+        if (Array.isArray(res.assets)) {
+          setImages((prev) => [...prev, ...res.assets]);
+        }
+      }
+    );
+  };
+
+  const openCamera = () => {
+    launchCamera(
+      {
+        mediaType: "photo",
+        quality: 0.7,
+        saveToPhotos: true,
+      },
+      (res) => {
+        if (res.didCancel || res.errorCode) return;
+
         if (res.assets) {
           setImages((prev) => [...prev, ...res.assets]);
         }
       }
     );
+  };
+
+  const loadComments = async () => {
+    if (!token || !request?.id) return;
+
+    try {
+      const response = await fetch(
+        `https://devticket.uchilefau.cl/api/tickets/${request.id}/comments`,
+        {
+          method: 'GET',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const json = await response.json();
+      console.log('ERROR COMMENTS:', json.data);
+
+      // 👇 AQUÍ está la lista real
+      setComments(Array.isArray(json.data) ? json.data : []);
+
+    } catch (error) {
+      console.log('ERROR COMMENTS:', error);
+    }
   };
 
   const handleSend = async () => {
@@ -95,8 +153,10 @@ export default function RequestDetailScreen() {
         });
       });
 
+      const ticketId = Number(request.id);
+      console.log('NUMERO', ticketId)
       const response = await fetch(
-        "https://devticket.uchilefau.cl/api/tickets/2172/comments",
+        `https://devticket.uchilefau.cl/api/tickets/${ticketId}/comments`,
         {
           method: "POST",
           headers: {
@@ -117,12 +177,18 @@ export default function RequestDetailScreen() {
       setComment("");
       setImages([]);
 
+      await loadComments();
+
     } catch (error) {
       console.log("ERROR ENVIANDO:", error);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadComments();
+  }, [token, request?.id]);
 
   const removeImage = (index: number) => {
     setImages((prev) => prev.filter((_, i) => i !== index));
@@ -136,7 +202,9 @@ export default function RequestDetailScreen() {
       date.getMonth() + 1
     ).padStart(2, "0")}/${date.getFullYear()} ${String(
       date.getHours()
-    ).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+    ).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}:${String(
+      date.getSeconds()
+    ).padStart(2, "0")}`;
   };
 
   const formatDate = (dateString: string) => {
@@ -146,12 +214,112 @@ export default function RequestDetailScreen() {
     ).padStart(2, "0")}-${date.getFullYear()}`;
   };
 
+  const handleTake = async () => { // Asegúrate de que sea una función asincrónica
+    console.log("Tomar ticket", request.id);
+
+    try {
+      const response = await fetch(`https://devticket.uchilefau.cl/api/tickets/${request.id}/take`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      // Verifica si la respuesta fue exitosa
+      if (response.ok) {
+        const data = await response.json();
+        console.log("Ticket tomado:", data);
+      } else {
+        console.error("Error al tomar el ticket:", response.status);
+      }
+    } catch (error) {
+      console.error("Error al hacer la solicitud:", error);
+    }
+  };
+
+  const handleEscalate = () => {
+    console.log("Escalar ticket", request.id);
+  };
+
+  useEffect(() => {
+    console.log("MODAL STATE:", modalVisible);
+  }, [modalVisible]);
+
+  const handleFinish = () => {
+    console.log("Finalizar ticket", request.id);
+
+    setModalVisible(true);
+  };
+
+  const handleCancel = () => {
+    console.log("Anular ticket", request.id);
+
+    setModalVisibleAnular(true);
+  };
+
+  const actions = [
+    { label: "Tomar ticket", icon: "user-check", color: "rgba(61, 123, 186, 0.57)", textColor: "#0d6efd", onPress: handleTake },
+    { label: "Escalar", icon: "arrow-up-circle", color: "rgba(241,245,248,1)", textColor: "#1a1d29", onPress: handleEscalate },
+    { label: "Finalizar", icon: "check-circle", color: "rgba(230,250,238,1)", textColor: "#008236", onPress: handleFinish },
+    { label: "Anular", icon: "x-circle", color: "rgba(255,234,235,1)", textColor: "#c10007", onPress: handleCancel },
+  ];
+
+  interface Comment {
+    id: number;
+    user: {
+      name: string;
+    };
+    internal: boolean;
+    comment: string;
+    created_at: string;
+  }
+
+  const renderCommentItem = (item: Comment) => {
+    return (
+      <View key={item.id} style={styles.commentItem}>
+        <Text style={styles.commentUser}>
+          {item.user?.name}
+
+          <View style={styles.commentStatus}>
+            <Icon
+              name={item.internal ? "lock" : "unlock"} // Candado cerrado o abierto
+              size={10} // Un poco más grande para mayor visibilidad
+              color={"#64748b"} // Azul para "interno", gris para "público"
+              style={{ marginLeft: 12 }}
+            />
+            <Text style={[styles.commentStatusText]}>
+              {item.internal ? "Interno" : "Público"} {/* Cambia el texto según 'internal' */}
+            </Text>
+          </View>
+
+        </Text>
+
+        <Text style={styles.commentText}>
+          {item.comment}
+        </Text>
+
+        <Text style={styles.commentDate}>
+          {formatDateTime(item.created_at)}
+        </Text>
+      </View>
+    );
+  };
+
+  // Función para manejar el refresh
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await loadComments();  // Actualiza los comentarios
+    setIsRefreshing(false);
+  };
+
   return (
     <View style={styles.container}>
 
       {/* HEADER */}
       <Animatable.View animation="fadeInDown" style={styles.header}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.headerSubtitle}>Bienvenido a</Text>
           <Text style={styles.headerTitle}>
             {tenant ? `${tenant}.uchile.cl` : "ayuda.uchile.cl"}
@@ -161,6 +329,7 @@ export default function RequestDetailScreen() {
         <TouchableOpacity style={styles.logout} onPress={logout}>
           <Icon name="log-out" size={16} color="#fff" />
         </TouchableOpacity>
+
       </Animatable.View>
 
       {/* SUB HEADER */}
@@ -174,7 +343,13 @@ export default function RequestDetailScreen() {
         </Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.contentContainer} refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
+          colors={["#2563eb"]}
+        />
+      }>
 
         {/* INFO CARD */}
         <View style={styles.card}>
@@ -221,23 +396,93 @@ export default function RequestDetailScreen() {
             <Text style={styles.text}>
               <Text style={styles.label}>Creación: </Text>
               <Text style={styles.value}>
-                Creación: {formatDate(request.created_at) || "Sin fecha"}
+                {formatDate(request.created_at) || "Sin fecha"}
               </Text>
             </Text>
           </View>
 
         </View>
 
+        {/* SLA */}
+        <View style={styles.card}>
+          <View style={styles.row}>
+            <Icon name="clock" size={14} color="#000000" />
+            <Text style={styles.text}>
+              <Text style={styles.labelSla}>SLA</Text>
+            </Text>
+          </View>
+
+          <View style={styles.rowSla}>
+            <Text style={styles.label}>Toma</Text>
+            <View style={styles.valueContainer}>
+              <Icon name="clock" size={14} color="#10b880" />
+              <Text style={styles.valueGreen}>
+                {request?.sla?.toma_horas ?? "0"}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.rowSla}>
+            <Text style={styles.label}>Respuesta</Text>
+            <View style={styles.valueContainer}>
+              <Icon name="clock" size={14} color="#10b880" />
+              <Text style={styles.valueGreen}>
+                {request?.sla?.respuesta_horas ?? "0"}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.rowSla}>
+            <Text style={styles.label}>Resolución</Text>
+            <View style={styles.valueContainer}>
+              <Icon name="clock" size={14} color="#f59d0b" />
+              <Text style={styles.valueOrange}>
+                {request?.sla?.resolucion_horas ?? "0"}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* ACCIONES */}
+        <View style={styles.card}>
+          <Text style={styles.labelSla}>ACCIONES</Text>
+          <View>
+            {actions.map((action, index) => (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.actionBtn,
+                  { backgroundColor: action.color }, // 👈 AQUÍ
+                  loading && { opacity: 0.6 }
+                ]}
+                onPress={action.onPress}
+                disabled={loading}
+              >
+                <Icon name={action.icon} size={18} color={action.textColor} />
+                <Text style={[styles.btnTextAccion, { color: action.textColor }]}>{action.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
         {/* COMENTARIOS */}
         <View style={styles.card}>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Añadir un comentario..."
-            value={comment}
-            onChangeText={setComment}
-            multiline
-          />
+          {comments.length === 0 ? (
+            <Text>No hay comentarios</Text>
+          ) : (
+            (Array.isArray(comments) ? comments : []).map(renderCommentItem)
+          )}
+
+          <View style={{ marginTop: 6 }}>
+            <TextInput
+              style={styles.input}
+              placeholder="Añadir un comentario..."
+              value={comment}
+              onChangeText={setComment}
+              multiline
+            />
+          </View>
 
           {/* IMAGES PREVIEW */}
           {images.length > 0 && (
@@ -279,7 +524,7 @@ export default function RequestDetailScreen() {
             {/* TEXTO ESTADO */}
             <View style={styles.internalComment}>
               <Icon
-                name={commentType === "interno" ? "lock" : "globe"}
+                name={commentType === "interno" ? "lock" : "unlock"}
                 size={14}
                 color="#64748b"
               />
@@ -292,8 +537,18 @@ export default function RequestDetailScreen() {
 
             {/* ATTACH */}
             <View style={styles.leftActions}>
-              <TouchableOpacity style={styles.iconBtn} onPress={openImagePicker}>
-                <Icon name="paperclip" size={18} color="#64748b" />
+              <TouchableOpacity
+                style={styles.iconBtn}
+                onPress={openCamera}
+              >
+                <Icon name="camera" size={18} color="#64748b" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.iconBtn}
+                onPress={openImagePicker}
+              >
+                <Icon name="image" size={18} color="#64748b" />
               </TouchableOpacity>
             </View>
 
@@ -316,9 +571,35 @@ export default function RequestDetailScreen() {
             {loading ? "Enviando..." : "Enviar"}
           </Text>
         </TouchableOpacity>
+      </ScrollView >
 
-      </ScrollView>
-    </View>
+      {/* MODAL FINALIZAR */}
+      <ModalFinalizarScreen
+        visible={modalVisible}
+        request={request}
+        onClose={() => {
+          console.log("CLOSE MODAL");
+          setModalVisible(false);
+        }}
+        onSubmit={(data) => {
+          console.log("FINALIZAR TICKET:", data);
+          setModalVisible(false);
+        }}
+        setLoading={setLoading}
+        setModalVisible={setModalVisible}
+      />
+
+      {/* MODAL ANULAR */}
+      <ModalAnularScreen
+        visible={modalVisibleAnular}
+        request={request}
+        onClose={() => setModalVisibleAnular(false)}  // Cierra el modal
+        onSubmit={setModalVisibleAnular}  // Maneja la lógica cuando se anule el ticket
+        setLoading={setLoading}  // Pasamos el setLoading
+        setModalVisible={setModalVisibleAnular}  // Pasamos setModalVisibleAnular
+      />
+
+    </View >
   );
 }
 
@@ -332,7 +613,7 @@ function getStatusColor(status: string) {
       return { backgroundColor: "#dbeafe", color: "#1d4ed8" };
     case "Cerrado":
       return { backgroundColor: "#dcfce7", color: "#166534" };
-    case "Cnulada":
+    case "Anulada":
       return { backgroundColor: "#fee2e2", color: "#991b1b" };
     default:
       return {};
@@ -358,7 +639,10 @@ function getPriorityColor(priority: string) {
 
 const styles = StyleSheet.create({
 
-  container: { flex: 1, backgroundColor: "#f5f6fa" },
+  container: {
+    flex: 1,
+    backgroundColor: "#f5f6fa",
+  },
 
   header: {
     backgroundColor: "#007aff",
@@ -367,8 +651,23 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
 
-  headerSubtitle: { color: "#fff", opacity: 0.8 },
-  headerTitle: { color: "#fff", fontSize: 18, fontWeight: "bold" },
+  headerTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+
+  headerSubtitle: {
+    color: "#fff",
+    opacity: 0.8,
+    marginTop: 8,
+  },
+  logout: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 30,
+  },
 
   headerTwo: {
     flexDirection: "row",
@@ -381,11 +680,17 @@ const styles = StyleSheet.create({
 
   content: { padding: 12 },
 
+  contentContainer: {
+    padding: 16,
+  },
+
   card: {
     backgroundColor: "#fff",
     padding: 14,
     borderRadius: 12,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0'
   },
 
   title: { fontSize: 16, fontWeight: "600" },
@@ -467,8 +772,6 @@ const styles = StyleSheet.create({
 
   btnText: { color: "#fff", fontWeight: "600" },
 
-  logout: { marginTop: 20 },
-
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   emptyText: { color: "#64748b" },
 
@@ -509,5 +812,86 @@ const styles = StyleSheet.create({
   value: {
     color: "#0f172a", // más oscuro para el nombre
     fontWeight: "500",
+  },
+
+  valueGreen: {
+    color: "#10b880", // más oscuro para el nombre
+    fontWeight: "500",
+  },
+
+  valueOrange: {
+    color: "#f59d0b", // más oscuro para el nombre
+    fontWeight: "500",
+  },
+
+  rowSla: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginVertical: 4,
+  },
+
+  labelSla: {
+    fontWeight: "600",
+    color: "#000",
+  },
+
+  valueContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4, // si no funciona, usa marginRight en el icon
+  },
+
+  actionBtn: {
+    backgroundColor: "#2563eb",
+    paddingVertical: 12,
+    borderRadius: 10,
+    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+
+  btnTextAccion: {
+    color: "#000000",
+    fontWeight: "600",
+  },
+
+  commentBox: {
+    marginBottom: 10,
+    padding: 10,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 6,
+  },
+  commentUser: {
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  commentText: {
+    color: '#334155',
+  },
+
+  commentItem: {
+    padding: 10,
+    borderBottomWidth: 1,
+    borderColor: '#eee',
+  },
+
+  commentDate: {
+    fontSize: 12,
+    color: 'gray',
+  },
+
+  commentStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+
+  commentStatusText: {
+    marginLeft: 3,
+    fontSize: 10,
+    color: '#64748b',
   },
 });
