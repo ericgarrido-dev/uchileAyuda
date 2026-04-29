@@ -66,7 +66,7 @@ export default function DashboardScreen() {
 
       const data = await response.json();
 
-      console.log("📥 API RESPONSE:", data);
+      console.log("📥 API RESPONSEssss:", data);
 
       const counts = data?.meta?.counts ?? {};
 

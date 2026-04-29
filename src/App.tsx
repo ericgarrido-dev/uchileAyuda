@@ -2,12 +2,12 @@ import React, { useState } from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import Icon from "react-native-vector-icons/Feather";
 
 import DashboardScreen from "../src/screens/DashboardScreen";
 import RequestsStack from "./navigation/RequestsStack";
 import StatsScreen from "../src/screens/StatsScreen";
 import { LoginScreen } from "../src/screens/LoginScreen";
-import { RegisterScreen } from "../src/screens/RegisterScreen";
 import TenantSelectionScreen from "../src/screens/TenantSelectionScreen";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -75,18 +75,7 @@ export default function App() {
                     await AsyncStorage.setItem("token", data.token);
                     await AsyncStorage.setItem("tenant_id", data.tenant_id);
                   }}
-                  onRegister={() => props.navigation.navigate("Register")}
-                  onForgotPassword={() => { }}
-                />
-              )}
-            </Stack.Screen>
 
-            <Stack.Screen name="Register">
-              {(props) => (
-                <RegisterScreen
-                  {...props}
-                  onRegister={() => setIsLoggedIn(true)}
-                  onBackToLogin={() => props.navigation.navigate("Login")}
                 />
               )}
             </Stack.Screen>
@@ -109,14 +98,48 @@ export default function App() {
         ) : (
 
           <Tab.Navigator
-            screenOptions={{
+            screenOptions={({ route }) => ({
               headerShown: false,
-            }}>
+              tabBarActiveTintColor: "#3b82f6",
+              tabBarInactiveTintColor: "#94a3b8",
+              tabBarStyle: {
+                height: 60,
+                paddingBottom: 5,
+                paddingTop: 5,
+                borderTopWidth: 1,
+                borderTopColor: "#e5e7eb",
+                backgroundColor: "#fff",
+              },
+              tabBarLabelStyle: {
+                fontSize: 10,
+                marginBottom: 2,
+                fontWeight: "500",
+              },
+              tabBarIcon: ({ color }) => {
+                let iconName = "";
+
+                switch (route.name) {
+                  case "Dashboard":
+                    iconName = "home";
+                    break;
+                  case "Requests":
+                    iconName = "file-text";
+                    break;
+                  case "Stats":
+                    iconName = "bar-chart-2";
+                    break;
+                  case "Search":
+                    iconName = "search";
+                    break;
+                }
+
+                return <Icon name={iconName} size={18} color={color} />;
+              },
+            })}>
             <Tab.Screen name="Dashboard" component={DashboardScreen} />
             <Tab.Screen name="Requests" component={RequestsStack} />
             <Tab.Screen name="Stats" component={StatsScreen} />
             <Tab.Screen name="Search" component={StatsScreen} />
-            <Tab.Screen name="Admin" component={StatsScreen} />
           </Tab.Navigator>
 
         )}

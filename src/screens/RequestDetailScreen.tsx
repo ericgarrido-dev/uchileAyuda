@@ -18,6 +18,7 @@ import { launchCamera, launchImageLibrary } from "react-native-image-picker";
 import { useAuth } from "../context/AuthContext";
 import ModalFinalizarScreen from "./ModalFinalizarScreen";
 import ModalAnularScreen from "./ModalAnularScreen";
+import ModalEscalarScreen from "./ModalEscalarScreen";
 
 export default function RequestDetailScreen() {
   const navigation = useNavigation<any>();
@@ -35,6 +36,7 @@ export default function RequestDetailScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalVisibleAnular, setModalVisibleAnular] = useState(false);
+  const [modalVisibleAsignar, setModalVisibleAsignar] = useState(false);
 
   /* ---------------- LOAD TENANT ---------------- */
   useEffect(() => {
@@ -241,6 +243,7 @@ export default function RequestDetailScreen() {
 
   const handleEscalate = () => {
     console.log("Escalar ticket", request.id);
+    setModalVisibleAsignar(true);
   };
 
   useEffect(() => {
@@ -259,12 +262,26 @@ export default function RequestDetailScreen() {
     setModalVisibleAnular(true);
   };
 
-  const actions = [
-    { label: "Tomar ticket", icon: "user-check", color: "rgba(61, 123, 186, 0.57)", textColor: "#0d6efd", onPress: handleTake },
+  const stateId = request.state?.id;
+
+  const baseActions = [
     { label: "Escalar", icon: "arrow-up-circle", color: "rgba(241,245,248,1)", textColor: "#1a1d29", onPress: handleEscalate },
     { label: "Finalizar", icon: "check-circle", color: "rgba(230,250,238,1)", textColor: "#008236", onPress: handleFinish },
     { label: "Anular", icon: "x-circle", color: "rgba(255,234,235,1)", textColor: "#c10007", onPress: handleCancel },
   ];
+
+  const actions =
+    stateId === 3 || stateId === 4
+      ? []
+      : stateId === 2
+        ? baseActions
+        : [
+          { label: "Tomar ticket", icon: "user-check", color: "rgba(61, 123, 186, 0.57)", textColor: "#0d6efd", onPress: handleTake },
+          ...baseActions,
+        ];
+
+  const primaryAction = actions[0];
+  const secondaryActions = actions.slice(1);
 
   interface Comment {
     id: number;
@@ -446,20 +463,46 @@ export default function RequestDetailScreen() {
         {/* ACCIONES */}
         <View style={styles.card}>
           <Text style={styles.labelSla}>ACCIONES</Text>
-          <View>
-            {actions.map((action, index) => (
+
+          {/* BOTÓN PRINCIPAL */}
+          {primaryAction && (
+            <TouchableOpacity
+              style={[
+                styles.primaryButton,
+                { backgroundColor: primaryAction.color },
+                loading && { opacity: 0.6 }
+              ]}
+              onPress={primaryAction.onPress}
+              disabled={loading}
+            >
+              <Icon name={primaryAction.icon} size={18} color={primaryAction.textColor} />
+              <Text style={[styles.primaryText, { color: primaryAction.textColor }]}>
+                {primaryAction.label}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* BOTONES SECUNDARIOS */}
+          <View style={styles.secondaryContainer}>
+            {secondaryActions.map((action, index) => (
               <TouchableOpacity
                 key={index}
                 style={[
-                  styles.actionBtn,
-                  { backgroundColor: action.color }, // 👈 AQUÍ
-                  loading && { opacity: 0.6 }
+                  styles.secondaryButton,
+                  action.label === "Anular" && styles.dangerButton
                 ]}
                 onPress={action.onPress}
                 disabled={loading}
               >
-                <Icon name={action.icon} size={18} color={action.textColor} />
-                <Text style={[styles.btnTextAccion, { color: action.textColor }]}>{action.label}</Text>
+                <Icon name={action.icon} size={16} color={action.textColor} />
+                <Text
+                  style={[
+                    styles.secondaryText,
+                    action.label === "Anular" && styles.dangerText
+                  ]}
+                >
+                  {action.label}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -597,6 +640,16 @@ export default function RequestDetailScreen() {
         onSubmit={setModalVisibleAnular}  // Maneja la lógica cuando se anule el ticket
         setLoading={setLoading}  // Pasamos el setLoading
         setModalVisible={setModalVisibleAnular}  // Pasamos setModalVisibleAnular
+      />
+
+      {/* MODAL ASIGNAR */}
+      <ModalEscalarScreen
+        visible={modalVisibleAsignar}
+        request={request}
+        onClose={() => setModalVisibleAsignar(false)}  // Cierra el modal
+        onSubmit={setModalVisibleAsignar}  // Maneja la lógica cuando se anule el ticket
+        setLoading={setLoading}  // Pasamos el setLoading
+        setModalVisible={setModalVisibleAsignar}  // Pasamos setModalVisibleAsignar
       />
 
     </View >
@@ -893,5 +946,51 @@ const styles = StyleSheet.create({
     marginLeft: 3,
     fontSize: 10,
     color: '#64748b',
+  },
+
+  primaryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 8,
+    marginTop: 10,
+  },
+
+  primaryText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+
+  secondaryContainer: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 10,
+  },
+
+  secondaryButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    gap: 6,
+  },
+
+  dangerButton: {
+    borderColor: "#fecaca",
+  },
+
+  secondaryText: {
+    fontSize: 13,
+    color: "#334155",
+  },
+
+  dangerText: {
+    color: "#dc2626",
   },
 });
