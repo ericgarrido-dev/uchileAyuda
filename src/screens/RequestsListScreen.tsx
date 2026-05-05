@@ -1,148 +1,153 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
-  FlatList,
+  ActivityIndicator,
   StyleSheet,
   ScrollView,
+  RefreshControl,
 } from "react-native";
 
 import Icon from "react-native-vector-icons/Feather";
 import * as Animatable from 'react-native-animatable';
 import { RequestCard } from "../components/RequestCard";
 import { useNavigation } from "@react-navigation/native";
-
-/* ---------------- MOCK DATA ---------------- */
-
-const mockRequests = [
-  {
-    id: 2165,
-    title: "Mantención LABLIBRE",
-    status: "process" as const,
-    priority: "medium" as const,
-    category: "Sin Categoría",
-    assignedUser: "Juan Pablo Morales",
-    assignedGroup: "Desarrollo",
-    createdAt: "31/03/2026",
-    slaStatus: "ok" as const,
-    slaLabel: "24h",
-  },
-  {
-    id: 2164,
-    title: "Problema con conexión WiFi en sala 301",
-    status: "pending" as const,
-    priority: "high" as const,
-    category: "Infraestructura",
-    assignedGroup: "Soporte TI",
-    createdAt: "31/03/2026",
-    slaStatus: "warning" as const,
-    slaLabel: "2h",
-  },
-  {
-    id: 2163,
-    title: "Solicitud de acceso a biblioteca digital",
-    status: "closed" as const,
-    priority: "low" as const,
-    category: "Accesos",
-    assignedUser: "María González",
-    assignedGroup: "Administración",
-    createdAt: "30/03/2026",
-    slaStatus: "ok" as const,
-    slaLabel: "Cumplido",
-  },
-  {
-    id: 2166,
-    title: "Solicitud de acceso a biblioteca digital",
-    status: "closed" as const,
-    priority: "low" as const,
-    category: "Accesos",
-    assignedUser: "Eric Garrido",
-    assignedGroup: "Administración",
-    createdAt: "30/03/2026",
-    slaStatus: "ok" as const,
-    slaLabel: "Cumplido",
-  },
-  {
-    id: 2169,
-    title: "Solicitud de acceso a biblioteca digital",
-    status: "closed" as const,
-    priority: "low" as const,
-    category: "Accesos",
-    assignedUser: "Eric Garrido",
-    assignedGroup: "Administración",
-    createdAt: "30/03/2026",
-    slaStatus: "ok" as const,
-    slaLabel: "Cumplido",
-  },
-];
+import { Header } from "../components/Header";
+import { useAuth } from "../context/AuthContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
 
 export default function RequestsListScreen() {
   const navigation = useNavigation<any>();
-  const [searchQuery, setSearchQuery] = useState("");
+  const { logout } = useAuth();
+  const [tickets, setTickets] = useState<any[]>([]);
+  const [tenant, setTenant] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const loadTickets = async () => {
+    try {
+      setLoading(true);
+
+      const token = await AsyncStorage.getItem("token");
+      const tenantStored = await AsyncStorage.getItem("tenant_id");
+
+      setTenant(tenantStored);
+
+      if (!token || !tenantStored) {
+        console.log("❌ Falta token o tenant");
+        return;
+      }
+
+      const response = await axios.get(
+        "https://devticket.uchilefau.cl/api/tickets/mis/solicitudes",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "X-Tenant": tenantStored,
+            Accept: "application/json",
+          },
+        }
+      );
+
+      const data = response.data; // 👈 axios ya parsea JSON
+
+      console.log("📥 API respuesta:", data);
+
+      setTickets(data?.data ?? []);
+    } catch (e) {
+      console.log("❌ ERROR TICKETS:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTickets();
+  }, []);
+
+  // Función para manejar el refresh
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await loadTickets();  // Actualiza los comentarios
+    setIsRefreshing(false);
+  };
 
   const handleRequestClick = (request: any) => {
-    navigation.navigate("RequestDetail", {
-      request
-    });
+    navigation.navigate("RequestDetail", { request });
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+
+    return `${day}-${month}-${year}`;
   };
 
   return (
     <View style={styles.container}>
 
-      <ScrollView contentContainerStyle={styles.contentContainer}>
-        {/* HEADER */}
+      {/* HEADER */}
+      <Header tenant={tenant} onLogout={logout} />
+
+      <ScrollView contentContainerStyle={styles.contentContainer} refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
+          colors={["#2563eb"]}
+        />
+      }>
+
         <View style={styles.header}>
-          <Text style={styles.title}>Solicitudes</Text>
-
-          {/* SEARCH */}
-          <View style={styles.searchBox}>
-            <Icon name="search" size={16} color="#94a3b8" />
-            <TextInput
-              placeholder="Buscar solicitudes..."
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              style={styles.input}
-              placeholderTextColor="#94a3b8"
-            />
-          </View>
-
-          {/* FILTERS */}
-          <View style={styles.filters}>
-            <TouchableOpacity style={styles.filterBtn}>
-              <Icon name="filter" size={16} color="#0f172a" />
-              <Text style={styles.filterText}>Filtros</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.filterBtn}>
-              <Icon name="arrow-up-down" size={16} color="#0f172a" />
-              <Text style={styles.filterText}>Ordenar</Text>
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.title}>Mis Solicitudes</Text>
         </View>
-
-        {/* LISTA */}
-        {mockRequests.map((request, index) => (
-          <Animatable.View
-            key={request.id}
-            animation="fadeInUp"
-            delay={index * 100}
-            style={styles.list}
-          >
-            <RequestCard
-              {...request}
-              onClick={() => handleRequestClick(request)}
-            />
-          </Animatable.View>
-        ))}
+        {/* LOADING */}
+        {loading ? (
+          <ActivityIndicator size="large" color="#007aff" />
+        ) : tickets.length === 0 ? (
+          <View style={{ alignItems: "center", marginTop: 20 }}>
+            <Text style={{ color: "#64748b", fontSize: 14 }}>
+              Sin registros
+            </Text>
+          </View>
+        ) : (
+          <>
+            {tickets.map((request, index) => (
+              <Animatable.View
+                key={request.id || index}
+                animation="fadeInUp"
+                delay={index * 100}
+              >
+                <RequestCard
+                  id={request.id}
+                  title={request.subject}
+                  status={request.state?.name?.toLowerCase()}
+                  priority={request.priority?.name?.toLowerCase()}
+                  category={request.category?.name || "Sin categoría"}
+                  assignedUser={request.assigned_user?.name}
+                  assignedGroup={request.assigned_group?.name}
+                  createdAt={formatDate(request.created_at)}
+                  slaStatus="ok"
+                  slaLabel="--"
+                  slaCommen={request.sla}
+                  updateAt={formatDate(request.updated_at)}
+                  onClick={() => handleRequestClick(request)}
+                />
+              </Animatable.View>
+            ))}
+          </>
+        )}
       </ScrollView>
     </View>
   );
 }
 
 /* ---------------- STYLES ---------------- */
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -150,10 +155,7 @@ const styles = StyleSheet.create({
   },
 
   header: {
-    padding: 16,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
+    padding: 4,
   },
 
   contentContainer: {
@@ -182,27 +184,26 @@ const styles = StyleSheet.create({
     color: "#0f172a",
   },
 
-  filters: {
-    flexDirection: "row",
-    gap: 10,
-  },
-
-  filterBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#e2e8f0",
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    gap: 6,
-  },
-
-  filterText: {
-    fontSize: 12,
-    color: "#0f172a",
-  },
-
   list: {
     paddingTop: 8,
+  },
+
+  emptyContainer: {
+    marginTop: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  emptyTitle: {
+    marginTop: 10,
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#334155",
+  },
+
+  emptySubtitle: {
+    marginTop: 4,
+    fontSize: 13,
+    color: "#94a3b8",
   },
 });

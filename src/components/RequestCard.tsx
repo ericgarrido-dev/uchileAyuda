@@ -13,7 +13,8 @@ interface RequestCardProps {
   createdAt: string;
   slaStatus: "ok" | "warning" | "danger";
   slaLabel: string;
-  slaCommen: string;
+  slaCommen?: string | null;
+  updateAt: string;
   onClick: () => void;
 }
 
@@ -29,6 +30,7 @@ export function RequestCard({
   slaStatus,
   slaLabel,
   slaCommen,
+  updateAt,
   onClick,
 }: RequestCardProps) {
   return (
@@ -85,7 +87,6 @@ export function RequestCard({
             </View>
           )}
         </View>
-
         <Text style={styles.footerText}>{createdAt}</Text>
       </View>
     </TouchableOpacity>
@@ -207,13 +208,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
   },
-
   userRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
   },
-
   footerText: {
     fontSize: 11,
     color: "#64748b",

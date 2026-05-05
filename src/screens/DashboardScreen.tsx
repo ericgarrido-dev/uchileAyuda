@@ -8,14 +8,14 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
-
 import Icon from "react-native-vector-icons/Feather";
 import { useNavigation } from "@react-navigation/native";
 import * as Animatable from "react-native-animatable";
-
 import { RequestCard } from "../components/RequestCard";
 import { useAuth } from "../context/AuthContext";
+import { Header } from "../components/Header";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
 
 export default function DashboardScreen() {
   const navigation = useNavigation<any>();
@@ -52,10 +52,9 @@ export default function DashboardScreen() {
         return;
       }
 
-      const response = await fetch(
+      const response = await axios.get(
         "https://devticket.uchilefau.cl/api/tickets",
         {
-          method: "GET",
           headers: {
             Authorization: `Bearer ${token}`,
             "X-Tenant": tenantStored,
@@ -64,13 +63,12 @@ export default function DashboardScreen() {
         }
       );
 
-      const data = await response.json();
+      const data = response.data; // 👈 axios ya parsea JSON
 
-      console.log("📥 API RESPONSEssss:", data);
+      console.log("📥 API RESPONSE:", data);
 
       const counts = data?.meta?.counts ?? {};
 
-      // ✅ FIX: mapping correcto
       setMetrics({
         openRequests: counts.bandeja_entrada ?? 0,
         inProgress: counts.en_proceso ?? 0,
@@ -80,7 +78,7 @@ export default function DashboardScreen() {
 
       setTickets(data?.data ?? []);
     } catch (e) {
-      console.log("ERROR TICKETS:", e);
+      console.log("❌ ERROR TICKETS:", e);
     } finally {
       setLoading(false);
     }
@@ -91,10 +89,7 @@ export default function DashboardScreen() {
   }, []);
 
   const handleRequestClick = (request: any) => {
-    navigation.navigate("Requests", {
-      screen: "RequestDetail",
-      params: { request },
-    });
+    navigation.navigate("RequestDetail", { request });
   };
 
   const formatDate = (dateString: string) => {
@@ -117,20 +112,7 @@ export default function DashboardScreen() {
   return (
     <View style={styles.container}>
 
-      {/* HEADER */}
-      <Animatable.View animation="fadeInDown" style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.headerSubtitle}>Bienvenido a</Text>
-          <Text style={styles.headerTitle}>
-            {tenant ? `${tenant}.uchile.cl` : "ayuda.uchile.cl"}
-          </Text>
-        </View>
-
-        <TouchableOpacity style={styles.logout} onPress={logout}>
-          <Icon name="log-out" size={16} color="#fff" />
-        </TouchableOpacity>
-
-      </Animatable.View>
+      <Header tenant={tenant} onLogout={logout} />
 
       <ScrollView contentContainerStyle={styles.contentContainer} refreshControl={
         <RefreshControl
@@ -139,6 +121,9 @@ export default function DashboardScreen() {
           colors={["#2563eb"]}
         />
       }>
+        <View style={styles.header}>
+          <Text style={styles.title}>Inicio</Text>
+        </View>
 
         {/* METRICS */}
         <View style={styles.metricsContainer}>
@@ -188,6 +173,7 @@ export default function DashboardScreen() {
                   slaStatus="ok"
                   slaLabel="--"
                   slaCommen={request.sla}
+                  updateAt={formatDate(request.updated_at)}
                   onClick={() => handleRequestClick(request)}
                 />
               </Animatable.View>
@@ -216,7 +202,6 @@ function MetricCard({ label, value, iconName, color }: any) {
 }
 
 /* ---------------- STYLES ---------------- */
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -224,10 +209,7 @@ const styles = StyleSheet.create({
   },
 
   header: {
-    backgroundColor: "#007aff",
-    padding: 20,
-    flexDirection: "row",
-    justifyContent: "space-between",
+    padding: 4,
   },
 
   headerTitle: {
@@ -235,6 +217,14 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
   },
+
+  title: {
+    fontSize: 22,
+    fontWeight: "600",
+    marginBottom: 12,
+    color: "#0f172a",
+  },
+
 
   headerSubtitle: {
     color: "#fff",
