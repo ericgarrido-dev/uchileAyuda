@@ -30,7 +30,7 @@ type Props = {
     visible: boolean;
     onClose: () => void;
     setLoading: (loading: boolean) => void;
-    onSubmit?: (data: any) => void;
+    onSubmit?: () => Promise<void>;
     request: any;
 };
 
@@ -188,8 +188,9 @@ export default function ModalFinalizarScreen({ visible, onClose, setLoading, onS
                 setTipoRespuesta(null);
                 setSelectedTecnico(null);
                 setSearchTecnico("");
-
+                
                 onClose();
+                await onSubmit?.();
             } else {
                 Alert.alert("Error", "No se pudo asignar el ticket");
             }

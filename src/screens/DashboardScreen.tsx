@@ -23,12 +23,11 @@ export default function DashboardScreen() {
 
   const [showAll, setShowAll] = useState(false);
   const [loading, setLoading] = useState(true);
-
   const [tickets, setTickets] = useState<any[]>([]);
   const [tenant, setTenant] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<string | null>(null);
 
-  // ✅ FIX: estado real para métricas
   const [metrics, setMetrics] = useState({
     openRequests: 0,
     inProgress: 0,
@@ -36,8 +35,20 @@ export default function DashboardScreen() {
     overdueRequests: 0,
   });
 
-  /* ---------------- LOAD TICKETS ---------------- */
+  /* ---------------- FILTER MAP — fuera de loadTickets ---------------- */
+  const filterMap: Record<string, (t: any) => boolean> = {
+    abiertas:    (t) => t.state?.id === 1,
+    proceso:     (t) => t.state?.id === 2,
+    finalizadas: (t) => t.state?.id === 3,
+    vencidas:    (t) => t.state?.id === 4,
+  };
 
+  //Se recalcula cada vez que cambia tickets o activeFilter
+  const filteredTickets = activeFilter
+    ? tickets.filter(filterMap[activeFilter])
+    : tickets;
+
+  /* ---------------- LOAD TICKETS ---------------- */
   const loadTickets = async () => {
     try {
       setLoading(true);
@@ -63,16 +74,17 @@ export default function DashboardScreen() {
         }
       );
 
-      const data = response.data; // 👈 axios ya parsea JSON
-
+      const data = response.data;
       console.log("📥 API RESPONSE:", data);
 
       const counts = data?.meta?.counts ?? {};
 
+      console.log("📥 countsss:", counts);
+
       setMetrics({
-        openRequests: counts.bandeja_entrada ?? 0,
-        inProgress: counts.en_proceso ?? 0,
-        closedRequests: counts.cerrados ?? 0,
+        openRequests:    counts.bandeja_entrada ?? 0,
+        inProgress:      counts.en_proceso ?? 0,
+        closedRequests:  counts.cerrados ?? 0,
         overdueRequests: counts.anulados ?? 0,
       });
 
@@ -88,56 +100,96 @@ export default function DashboardScreen() {
     loadTickets();
   }, []);
 
+  /* ---------------- HANDLERS ---------------- */
   const handleRequestClick = (request: any) => {
     navigation.navigate("RequestDetail", { request });
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-
-    const day = String(date.getDate()).padStart(2, "0");
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const year = date.getFullYear();
-
-    return `${day}-${month}-${year}`;
+  const handleFilterPress = (filter: string) => {
+    // Toca el mismo filtro activo → lo desactiva
+    setActiveFilter((prev) => (prev === filter ? null : filter));
+    setShowAll(false); // resetea "ver todas" al cambiar filtro
   };
 
-  // Función para manejar el refresh
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await loadTickets();  // Actualiza los comentarios
+    await loadTickets();
     setIsRefreshing(false);
   };
 
+  /* ---------------- FORMAT DATE ---------------- */
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const day   = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year  = date.getFullYear();
+    return `${day}-${month}-${year}`;
+  };
+
+  /* ---------------- TÍTULO SECCIÓN ---------------- */
+  const sectionTitle = activeFilter
+    ? activeFilter.charAt(0).toUpperCase() + activeFilter.slice(1)
+    : "Solicitudes";
+
+  /* ---------------- RENDER ---------------- */
   return (
     <View style={styles.container}>
 
       <Header tenant={tenant} onLogout={logout} />
 
-      <ScrollView contentContainerStyle={styles.contentContainer} refreshControl={
-        <RefreshControl
-          refreshing={isRefreshing}
-          onRefresh={handleRefresh}
-          colors={["#2563eb"]}
-        />
-      }>
+      <ScrollView
+        contentContainerStyle={styles.contentContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            colors={["#2563eb"]}
+          />
+        }
+      >
         <View style={styles.header}>
           <Text style={styles.title}>Inicio</Text>
         </View>
 
         {/* METRICS */}
         <View style={styles.metricsContainer}>
-
           <View style={styles.metricsRow}>
-            <MetricCard label="Abiertas" value={metrics.openRequests} iconName="file-text" color="#3b82f6" />
-            <MetricCard label="Proceso" value={metrics.inProgress} iconName="clock" color="#f59e0b" />
+            <MetricCard
+              label="Pendientes"
+              value={metrics.openRequests}
+              iconName="file-text"
+              color="#3b82f6"
+              active={activeFilter === "abiertas"}
+              onPress={() => handleFilterPress("abiertas")}
+            />
+            <MetricCard
+              label="Proceso"
+              value={metrics.inProgress}
+              iconName="clock"
+              color="#f59e0b"
+              active={activeFilter === "proceso"}
+              onPress={() => handleFilterPress("proceso")}
+            />
           </View>
 
           <View style={styles.metricsRow}>
-            <MetricCard label="Vencidas" value={metrics.overdueRequests} iconName="alert-circle" color="#dc2626" />
-            <MetricCard label="Finalizadas" value={metrics.closedRequests} iconName="check-circle" color="#10b981" />
+            <MetricCard
+              label="Anuladas"
+              value={metrics.overdueRequests}
+              iconName="alert-circle"
+              color="#dc2626"
+              active={activeFilter === "vencidas"}
+              onPress={() => handleFilterPress("vencidas")}
+            />
+            <MetricCard
+              label="Cerradas"
+              value={metrics.closedRequests}
+              iconName="check-circle"
+              color="#10b981"
+              active={activeFilter === "finalizadas"}
+              onPress={() => handleFilterPress("finalizadas")}
+            />
           </View>
-
         </View>
 
         {/* LOADING */}
@@ -146,7 +198,8 @@ export default function DashboardScreen() {
         ) : (
           <>
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Solicitudes</Text>
+              {/* ✅ Título cambia según filtro activo */}
+              <Text style={styles.sectionTitle}>{sectionTitle}</Text>
 
               <TouchableOpacity onPress={() => setShowAll(!showAll)}>
                 <Text style={styles.seeAllButton}>
@@ -155,49 +208,62 @@ export default function DashboardScreen() {
               </TouchableOpacity>
             </View>
 
-            {(showAll ? tickets : tickets.slice(0, 3)).map((request, index) => (
-              <Animatable.View
-                key={request.id || index}
-                animation="fadeInUp"
-                delay={index * 100}
-              >
-                <RequestCard
-                  id={request.id}
-                  title={request.subject}
-                  status={request.state?.name?.toLowerCase()}
-                  priority={request.priority?.name?.toLowerCase()}
-                  category={request.category?.name || "Sin categoría"}
-                  assignedUser={request.assigned_user?.name}
-                  assignedGroup={request.assigned_group?.name}
-                  createdAt={formatDate(request.created_at)}
-                  slaStatus="ok"
-                  slaLabel="--"
-                  slaCommen={request.sla}
-                  updateAt={formatDate(request.updated_at)}
-                  onClick={() => handleRequestClick(request)}
-                />
-              </Animatable.View>
-            ))}
+            {/* ✅ Lista usa filteredTickets */}
+            {filteredTickets.length === 0 ? (
+              <Text style={styles.emptyText}>
+                No hay solicitudes {activeFilter ? `en "${sectionTitle}"` : ""}
+              </Text>
+            ) : (
+              (showAll ? filteredTickets : filteredTickets.slice(0, 3)).map(
+                (request, index) => (
+                  <Animatable.View
+                    key={request.id || index}
+                    animation="fadeInUp"
+                    delay={index * 100}
+                  >
+                    <RequestCard
+                      id={request.id}
+                      title={request.subject}
+                      status={request.state?.name?.toLowerCase()}
+                      priority={request.priority?.name?.toLowerCase()}
+                      category={request.category?.name || "Sin categoría"}
+                      assignedUser={request.assigned_user?.name}
+                      assignedGroup={request.assigned_group?.name}
+                      createdAt={formatDate(request.created_at)}
+                      slaStatus="ok"
+                      slaLabel="--"
+                      slaCommen={request.sla}
+                      updateAt={formatDate(request.updated_at)}
+                      onClick={() => handleRequestClick(request)}
+                    />
+                  </Animatable.View>
+                )
+              )
+            )}
           </>
         )}
-
       </ScrollView>
     </View>
   );
 }
 
-/* ---------------- COMPONENT ---------------- */
-
-function MetricCard({ label, value, iconName, color }: any) {
+/* ---------------- METRIC CARD ---------------- */
+function MetricCard({ label, value, iconName, color, onPress, active }: any) {
   return (
-    <View style={styles.metricCard}>
+    <TouchableOpacity
+      style={[
+        styles.metricCard,
+        active && { borderWidth: 2, borderColor: color },
+      ]}
+      onPress={onPress}
+      activeOpacity={0.8}
+    >
       <View style={[styles.iconBox, { backgroundColor: color }]}>
         <Icon name={iconName} size={18} color="#fff" />
       </View>
-
       <Text style={styles.metricValue}>{value}</Text>
       <Text style={styles.metricLabel}>{label}</Text>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -205,92 +271,78 @@ function MetricCard({ label, value, iconName, color }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f6fa",
+    backgroundColor: "#f1f5f9",
   },
-
-  header: {
-    padding: 4,
-  },
-
-  headerTitle: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-
-  title: {
-    fontSize: 22,
-    fontWeight: "600",
-    marginBottom: 12,
-    color: "#0f172a",
-  },
-
-
-  headerSubtitle: {
-    color: "#fff",
-    opacity: 0.8,
-    marginTop: 8,
-  },
-
   contentContainer: {
     padding: 16,
+    paddingBottom: 32,
   },
-
-  section: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 10,
+  header: {
+    marginBottom: 16,
   },
-
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
+  title: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#1e293b",
   },
-
-  seeAllButton: {
-    color: "#007aff",
-  },
-
   metricsContainer: {
-    marginTop: 10,
-  },
-
-  metricsRow: {
-    flexDirection: 'row',
+    marginBottom: 16,
     gap: 10,
-    marginBottom: 10,
   },
-
+  metricsRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
   metricCard: {
     flex: 1,
-    backgroundColor: '#fff',
-    padding: 14,
+    backgroundColor: "#fff",
     borderRadius: 12,
+    padding: 14,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+    borderWidth: 2,
+    borderColor: "transparent",
   },
-
   iconBox: {
     width: 36,
     height: 36,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 8,
   },
-
   metricValue: {
-    fontSize: 22,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#1e293b",
   },
-
   metricLabel: {
     fontSize: 12,
-    color: '#666',
+    color: "#64748b",
+    marginTop: 2,
   },
-
-  logout: {
+  section: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 6,
-    marginTop: 30,
+    marginBottom: 10,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1e293b",
+  },
+  seeAllButton: {
+    fontSize: 13,
+    color: "#2563eb",
+  },
+  emptyText: {
+    textAlign: "center",
+    color: "#94a3b8",
+    marginTop: 24,
+    fontSize: 14,
   },
 });

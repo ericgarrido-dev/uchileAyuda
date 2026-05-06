@@ -98,9 +98,9 @@ export function RequestCard({
 function getStatusColor(status: string) {
   switch (status) {
     case "pendiente":
-      return { backgroundColor: "#fef3c7", color: "#92400e" };
-    case "proceso":
       return { backgroundColor: "#dbeafe", color: "#1d4ed8" };
+    case "proceso":
+      return { backgroundColor: "#fef3c7", color: "#92400e" };
     case "cerrado":
       return { backgroundColor: "#dcfce7", color: "#166534" };
     case "anulada":
@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
   },
 
   tag: {
-    flex: 1,              // 🔥 todos ocupan el mismo ancho
+    flex: 1, //todos ocupan el mismo ancho
     fontSize: 10,
     paddingVertical: 4,
     borderRadius: 6,
@@ -188,7 +188,7 @@ const styles = StyleSheet.create({
   },
 
   category: {
-    flex: 1,              // 🔥 igual que los otros
+    flex: 1, //igual que los otros
     fontSize: 10,
     color: "#64748b",
     backgroundColor: "#f1f5f9",
@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center", // 👈 clave
+    alignItems: "center", //clave
   },
 
   leftFooter: {

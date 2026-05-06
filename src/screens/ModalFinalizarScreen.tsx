@@ -23,7 +23,7 @@ type Props = {
     visible: boolean;
     onClose: () => void;
     request: any;
-    onSubmit?: (data: any) => void;
+    onSubmit?: () => Promise<void>;
     setLoading: (loading: boolean) => void;  // Esta es la propiedad para setLoading
     setModalVisible: (visible: boolean) => void;  // Esta es la propiedad para setModalVisible
 };
@@ -94,7 +94,7 @@ export default function ModalFinalizarScreen({
 
         const ordenados = data.sort((a: Comment, b: Comment) => a.id - b.id);
 
-        const formatted = ordenados.map((item : Comment) => ({
+        const formatted = ordenados.map((item: Comment) => ({
             label: item.name,
             value: String(item.id),
         }));
@@ -105,18 +105,18 @@ export default function ModalFinalizarScreen({
 
     /* ---------------- MEDIA ---------------- */
     const openCamera = () => {
-    launchCamera(
-        { mediaType: "photo", quality: 0.7, saveToPhotos: true },
-        (res) => {
-            if (res.didCancel || res.errorCode) return;
-            
-            // Verificamos que 'res.assets' sea un array antes de intentar usarlo
-            if (res.assets && Array.isArray(res.assets)) {
-                setImages((prev) => [...prev, ...res.assets]);
+        launchCamera(
+            { mediaType: "photo", quality: 0.7, saveToPhotos: true },
+            (res) => {
+                if (res.didCancel || res.errorCode) return;
+
+                // Verificamos que 'res.assets' sea un array antes de intentar usarlo
+                if (res.assets && Array.isArray(res.assets)) {
+                    setImages((prev) => [...prev, ...res.assets]);
+                }
             }
-        }
-    );
-};
+        );
+    };
 
     const openGallery = () => {
         launchImageLibrary(
@@ -131,6 +131,11 @@ export default function ModalFinalizarScreen({
     /* ---------------- SUBMIT ---------------- */
     const handleSubmit = async () => {
         // Verifica que `tipoRespuesta` tenga un valor válido
+        if (!comment) {
+            Alert.alert("Por favor, ingrese comentario.");
+            return;
+
+        }
         if (!tipoRespuesta) {
             Alert.alert("Por favor, seleccione un estado de cierre.");
             return;
@@ -185,17 +190,17 @@ export default function ModalFinalizarScreen({
             console.log("RESPUESTA DE FINALIZACIÓN:", data);
 
             if (data.success) {
-                // Si la finalización fue exitosa
-                onSubmit?.(payload);  // Llamar al callback de onSubmit si se pasa uno
-
-                // Limpiar los valores del formulario
+                // Limpiar formulario
                 setComment("");
                 setTipoRespuesta(null);
                 setImages([]);
 
-                // Cerrar el modal
+                // Cerrar modal
                 setModalVisible(false);
                 onClose();
+
+                // ✅ Una sola llamada, sin argumentos
+                await onSubmit?.();
             } else {
                 console.error("Error al finalizar el ticket", data.message);
                 Alert.alert("No se pudo finalizar el ticket, por favor intente nuevamente.");

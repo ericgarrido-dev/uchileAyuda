@@ -8,6 +8,9 @@ import {
   TextInput,
   Image,
   RefreshControl,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
 } from "react-native";
 
 import Icon from "react-native-vector-icons/Feather";
@@ -26,40 +29,43 @@ export default function RequestDetailScreen() {
   const { logout } = useAuth();
 
   const request = route.params?.request;
+
   const [comment, setComment] = useState("");
   const [images, setImages] = useState<any[]>([]);
   const [isChecked, setIsChecked] = useState(false);
   const [tenant, setTenant] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [comments, setComments] = useState([]); // 👈 NUEVO
+  const [comments, setComments] = useState([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalVisibleAnular, setModalVisibleAnular] = useState(false);
   const [modalVisibleAsignar, setModalVisibleAsignar] = useState(false);
+  const [commentType, setCommentType] = useState<"publico" | "interno">("publico");
 
-  /* ---------------- LOAD TENANT ---------------- */
+  // ✅ Estado local del ticket — se actualiza tras acciones
+  const [currentRequest, setCurrentRequest] = useState(route.params?.request);
+
+  /* ---------------- LOAD TENANT & TOKEN ---------------- */
   useEffect(() => {
     const loadTenant = async () => {
       const tenantStored = await AsyncStorage.getItem("tenant_id");
       const tokenStore = await AsyncStorage.getItem("token");
-
       setTenant(tenantStored);
       setToken(tokenStore);
     };
-
     loadTenant();
   }, []);
 
   useEffect(() => {
     const load = async () => {
       if (request?.id && token) {
+        await loadTicket();
         await loadComments();
       }
     };
-
     load();
-  }, [request, token]);
+  }, [request?.id, token]);
 
   if (!request) {
     return (
@@ -69,19 +75,65 @@ export default function RequestDetailScreen() {
     );
   }
 
-  const [commentType, setCommentType] = useState<"publico" | "interno">("publico");
+  /* ---------------- LOAD TICKET ---------------- */
+  const loadTicket = async () => {
+    if (!token || !request?.id) return;
+
+    try {
+      const response = await fetch(
+        `https://devticket.uchilefau.cl/api/tickets/${request.id}`,
+        {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const json = await response.json();
+      console.log("LOAD TICKET:", json.data);
+
+      if (response.ok && json.data) {
+        setCurrentRequest(json.data); // ✅ actualiza estado reactivo
+      }
+    } catch (error) {
+      console.log("ERROR CARGANDO TICKET:", error);
+    }
+  };
+
+  /* ---------------- LOAD COMMENTS ---------------- */
+  const loadComments = async () => {
+    if (!token || !request?.id) return;
+
+    try {
+      const response = await fetch(
+        `https://devticket.uchilefau.cl/api/tickets/${request.id}/comments`,
+        {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const json = await response.json();
+      console.log("COMMENTS:", json.data);
+      setComments(Array.isArray(json.data) ? json.data : []);
+    } catch (error) {
+      console.log("ERROR COMMENTS:", error);
+    }
+  };
 
   /* ---------------- PICK IMAGES ---------------- */
   const openImagePicker = () => {
     launchImageLibrary(
-      {
-        mediaType: "photo",
-        selectionLimit: 0,
-        quality: 0.7,
-      },
+      { mediaType: "photo", selectionLimit: 0, quality: 0.7 },
       (res) => {
         if (res.didCancel || res.errorCode) return;
-
         if (Array.isArray(res.assets)) {
           setImages((prev) => [...prev, ...res.assets]);
         }
@@ -91,14 +143,9 @@ export default function RequestDetailScreen() {
 
   const openCamera = () => {
     launchCamera(
-      {
-        mediaType: "photo",
-        quality: 0.7,
-        saveToPhotos: true,
-      },
+      { mediaType: "photo", quality: 0.7, saveToPhotos: true },
       (res) => {
         if (res.didCancel || res.errorCode) return;
-
         if (res.assets) {
           setImages((prev) => [...prev, ...res.assets]);
         }
@@ -106,46 +153,19 @@ export default function RequestDetailScreen() {
     );
   };
 
-  const loadComments = async () => {
-    if (!token || !request?.id) return;
-
-    try {
-      const response = await fetch(
-        `https://devticket.uchilefau.cl/api/tickets/${request.id}/comments`,
-        {
-          method: 'GET',
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      const json = await response.json();
-      console.log('ERROR COMMENTS:', json.data);
-
-      // 👇 AQUÍ está la lista real
-      setComments(Array.isArray(json.data) ? json.data : []);
-
-    } catch (error) {
-      console.log('ERROR COMMENTS:', error);
-    }
+  const removeImage = (index: number) => {
+    setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
+  /* ---------------- SEND COMMENT ---------------- */
   const handleSend = async () => {
     try {
       setLoading(true);
 
       const formData = new FormData();
-
-      // comentario
       formData.append("comment", comment);
+      formData.append("type", commentType);
 
-      // interno
-      formData.append("type", isChecked ? "interno" : "publico");
-
-      // imágenes
       images.forEach((img, index) => {
         formData.append("files[]", {
           uri: img.uri,
@@ -156,7 +176,7 @@ export default function RequestDetailScreen() {
       });
 
       const ticketId = Number(request.id);
-      console.log('NUMERO', ticketId)
+
       const response = await fetch(
         `https://devticket.uchilefau.cl/api/tickets/${ticketId}/comments`,
         {
@@ -164,7 +184,6 @@ export default function RequestDetailScreen() {
           headers: {
             Accept: "application/json",
             "Content-Type": "multipart/form-data",
-            // si tienes auth:
             Authorization: `Bearer ${token}`,
           },
           body: formData,
@@ -172,15 +191,11 @@ export default function RequestDetailScreen() {
       );
 
       const data = await response.json();
-
       console.log("RESPUESTA API:", data);
 
-      // limpiar UI
       setComment("");
       setImages([]);
-
       await loadComments();
-
     } catch (error) {
       console.log("ERROR ENVIANDO:", error);
     } finally {
@@ -188,18 +203,9 @@ export default function RequestDetailScreen() {
     }
   };
 
-  useEffect(() => {
-    loadComments();
-  }, [token, request?.id]);
-
-  const removeImage = (index: number) => {
-    setImages((prev) => prev.filter((_, i) => i !== index));
-  };
-
   /* ---------------- FORMAT DATE ---------------- */
   const formatDateTime = (dateString: string) => {
     const date = new Date(dateString);
-
     return `${String(date.getDate()).padStart(2, "0")}/${String(
       date.getMonth() + 1
     ).padStart(2, "0")}/${date.getFullYear()} ${String(
@@ -216,28 +222,37 @@ export default function RequestDetailScreen() {
     ).padStart(2, "0")}-${date.getFullYear()}`;
   };
 
-  const handleTake = async () => { // Asegúrate de que sea una función asincrónica
+  /* ---------------- ACCIONES ---------------- */
+  const handleTake = async () => {
     console.log("Tomar ticket", request.id);
 
     try {
-      const response = await fetch(`https://devticket.uchilefau.cl/api/tickets/${request.id}/take`, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await fetch(
+        `https://devticket.uchilefau.cl/api/tickets/${request.id}/take`,
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
-      // Verifica si la respuesta fue exitosa
+      const data = await response.json();
+
       if (response.ok) {
-        const data = await response.json();
         console.log("Ticket tomado:", data);
+        Alert.alert("Éxito", "Ticket tomado correctamente.");
+        await loadTicket();   // ✅ recarga datos frescos del ticket
+        await loadComments(); // ✅ recarga comentarios
       } else {
-        console.error("Error al tomar el ticket:", response.status);
+        console.error("Error al tomar el ticket:", data);
+        Alert.alert("Error", data?.message || "No se pudo tomar el ticket.");
       }
     } catch (error) {
       console.error("Error al hacer la solicitud:", error);
+      Alert.alert("Error", "Problema de conexión o del servidor.");
     }
   };
 
@@ -246,23 +261,19 @@ export default function RequestDetailScreen() {
     setModalVisibleAsignar(true);
   };
 
-  useEffect(() => {
-    console.log("MODAL STATE:", modalVisible);
-  }, [modalVisible]);
-
   const handleFinish = () => {
     console.log("Finalizar ticket", request.id);
-
     setModalVisible(true);
   };
 
   const handleCancel = () => {
     console.log("Anular ticket", request.id);
-
     setModalVisibleAnular(true);
   };
 
-  const stateId = request.state?.id;
+  // ✅ Usa currentRequest para que reaccione a cambios
+  const stateId = currentRequest?.state?.id;
+  const isBlocked = stateId === 3 || stateId === 4;
 
   const baseActions = [
     { label: "Escalar", icon: "arrow-up-circle", color: "rgba(241,245,248,1)", textColor: "#1a1d29", onPress: handleEscalate },
@@ -283,55 +294,50 @@ export default function RequestDetailScreen() {
   const primaryAction = actions[0];
   const secondaryActions = actions.slice(1);
 
+  /* ---------------- COMMENT ITEM ---------------- */
   interface Comment {
     id: number;
-    user: {
-      name: string;
-    };
+    user: { name: string };
     internal: boolean;
     comment: string;
     created_at: string;
   }
 
-  const renderCommentItem = (item: Comment) => {
-    return (
-      <View key={item.id} style={styles.commentItem}>
-        <Text style={styles.commentUser}>
-          {item.user?.name}
+  const renderCommentItem = (item: Comment) => (
+    <View key={item.id} style={styles.commentItem}>
+      <Text style={styles.commentUser}>
+        {item.user?.name}
+        <View style={styles.commentStatus}>
+          <Icon
+            name={item.internal ? "lock" : "unlock"}
+            size={10}
+            color={"#64748b"}
+            style={{ marginLeft: 12 }}
+          />
+          <Text style={styles.commentStatusText}>
+            {item.internal ? "Interno" : "Público"}
+          </Text>
+        </View>
+      </Text>
+      <Text style={styles.commentText}>{item.comment}</Text>
+      <Text style={styles.commentDate}>{formatDateTime(item.created_at)}</Text>
+    </View>
+  );
 
-          <View style={styles.commentStatus}>
-            <Icon
-              name={item.internal ? "lock" : "unlock"} // Candado cerrado o abierto
-              size={10} // Un poco más grande para mayor visibilidad
-              color={"#64748b"} // Azul para "interno", gris para "público"
-              style={{ marginLeft: 12 }}
-            />
-            <Text style={[styles.commentStatusText]}>
-              {item.internal ? "Interno" : "Público"} {/* Cambia el texto según 'internal' */}
-            </Text>
-          </View>
-
-        </Text>
-
-        <Text style={styles.commentText}>
-          {item.comment}
-        </Text>
-
-        <Text style={styles.commentDate}>
-          {formatDateTime(item.created_at)}
-        </Text>
-      </View>
-    );
-  };
-
-  // Función para manejar el refresh
+  /* ---------------- REFRESH ---------------- */
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await loadComments();  // Actualiza los comentarios
+    await loadTicket();   // ✅ también recarga el ticket completo
+    await loadComments();
     setIsRefreshing(false);
   };
 
+  /* ---------------- RENDER ---------------- */
   return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
     <View style={styles.container}>
 
       {/* HEADER */}
@@ -342,11 +348,9 @@ export default function RequestDetailScreen() {
             {tenant ? `${tenant}.uchile.cl` : "ayuda.uchile.cl"}
           </Text>
         </View>
-
         <TouchableOpacity style={styles.logout} onPress={logout}>
           <Icon name="log-out" size={16} color="#fff" />
         </TouchableOpacity>
-
       </Animatable.View>
 
       {/* SUB HEADER */}
@@ -354,37 +358,41 @@ export default function RequestDetailScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Icon name="arrow-left" size={22} />
         </TouchableOpacity>
-
         <Text style={styles.headerTitleTwo}>
-          Solicitud #{request.id}
+          Solicitud #{currentRequest?.id}
         </Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.contentContainer} refreshControl={
-        <RefreshControl
-          refreshing={isRefreshing}
-          onRefresh={handleRefresh}
-          colors={["#2563eb"]}
-        />
-      }>
+      <ScrollView
+        contentContainerStyle={styles.contentContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            colors={["#2563eb"]}
+          />
+        }
+      >
 
-        {/* INFO CARD */}
+        {/* INFO CARD — ✅ todo usa currentRequest */}
         <View style={styles.card}>
-          <Text style={styles.title}>{request.subject}</Text>
-          <Text style={styles.sub}>{formatDateTime(request?.created_at) || "Sin fecha"}</Text>
+          <Text style={styles.title}>{currentRequest?.subject}</Text>
+          <Text style={styles.sub}>
+            {currentRequest?.created_at
+              ? formatDateTime(currentRequest.created_at)
+              : "Sin fecha"}
+          </Text>
 
           {/* TAGS */}
           <View style={styles.tags}>
-            <Text style={[styles.tag, getStatusColor(request?.state?.name)]}>
-              {request?.state?.name ?? "Sin estado"}
+            <Text style={[styles.tag, getStatusColor(currentRequest?.state?.name)]}>
+              {currentRequest?.state?.name ?? "Sin estado"}
             </Text>
-
-            <Text style={[styles.tag, getPriorityColor(request?.priority?.name)]}>
-              {request?.priority?.name ?? "Sin prioridad"}
+            <Text style={[styles.tag, getPriorityColor(currentRequest?.priority?.name)]}>
+              {currentRequest?.priority?.name ?? "Sin prioridad"}
             </Text>
-
             <Text style={styles.category}>
-              {request?.category?.name ?? "Sin categoria"}
+              {currentRequest?.category?.name ?? "Sin categoria"}
             </Text>
           </View>
 
@@ -393,7 +401,7 @@ export default function RequestDetailScreen() {
             <Text style={styles.text}>
               <Text style={styles.label}>Asignado a: </Text>
               <Text style={styles.value}>
-                {request?.assigned_user?.name ?? "Sin asignar"}
+                {currentRequest?.assigned_user?.name ?? "Sin asignar"}
               </Text>
             </Text>
           </View>
@@ -403,7 +411,7 @@ export default function RequestDetailScreen() {
             <Text style={styles.text}>
               <Text style={styles.label}>Grupo: </Text>
               <Text style={styles.value}>
-                {request?.assigned_group?.name ?? "Sin grupo"}
+                {currentRequest?.assigned_group?.name ?? "Sin grupo"}
               </Text>
             </Text>
           </View>
@@ -413,14 +421,15 @@ export default function RequestDetailScreen() {
             <Text style={styles.text}>
               <Text style={styles.label}>Creación: </Text>
               <Text style={styles.value}>
-                {formatDate(request.created_at) || "Sin fecha"}
+                {currentRequest?.created_at
+                  ? formatDate(currentRequest.created_at)
+                  : "Sin fecha"}
               </Text>
             </Text>
           </View>
-
         </View>
 
-        {/* SLA */}
+        {/* SLA — ✅ usa currentRequest */}
         <View style={styles.card}>
           <View style={styles.row}>
             <Icon name="clock" size={14} color="#000000" />
@@ -434,7 +443,7 @@ export default function RequestDetailScreen() {
             <View style={styles.valueContainer}>
               <Icon name="clock" size={14} color="#10b880" />
               <Text style={styles.valueGreen}>
-                {request?.sla?.toma_horas ?? "0"}
+                {currentRequest?.sla?.toma_horas ?? "0"}
               </Text>
             </View>
           </View>
@@ -444,7 +453,7 @@ export default function RequestDetailScreen() {
             <View style={styles.valueContainer}>
               <Icon name="clock" size={14} color="#10b880" />
               <Text style={styles.valueGreen}>
-                {request?.sla?.respuesta_horas ?? "0"}
+                {currentRequest?.sla?.respuesta_horas ?? "0"}
               </Text>
             </View>
           </View>
@@ -454,179 +463,173 @@ export default function RequestDetailScreen() {
             <View style={styles.valueContainer}>
               <Icon name="clock" size={14} color="#f59d0b" />
               <Text style={styles.valueOrange}>
-                {request?.sla?.resolucion_horas ?? "0"}
+                {currentRequest?.sla?.resolucion_horas ?? "0"}
               </Text>
             </View>
           </View>
         </View>
 
+
         {/* ACCIONES */}
-        <View style={styles.card}>
-          <Text style={styles.labelSla}>ACCIONES</Text>
+        {stateId !== 3 && stateId !== 4 && (
+          <View style={styles.card}>
+            <Text style={styles.labelSla}>ACCIONES</Text>
 
-          {/* BOTÓN PRINCIPAL */}
-          {primaryAction && (
-            <TouchableOpacity
-              style={[
-                styles.primaryButton,
-                { backgroundColor: primaryAction.color },
-                loading && { opacity: 0.6 }
-              ]}
-              onPress={primaryAction.onPress}
-              disabled={loading}
-            >
-              <Icon name={primaryAction.icon} size={18} color={primaryAction.textColor} />
-              <Text style={[styles.primaryText, { color: primaryAction.textColor }]}>
-                {primaryAction.label}
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          {/* BOTONES SECUNDARIOS */}
-          <View style={styles.secondaryContainer}>
-            {secondaryActions.map((action, index) => (
+            {primaryAction && (
               <TouchableOpacity
-                key={index}
                 style={[
-                  styles.secondaryButton,
-                  action.label === "Anular" && styles.dangerButton
+                  styles.primaryButton,
+                  { backgroundColor: primaryAction.color },
+                  loading && { opacity: 0.6 },
                 ]}
-                onPress={action.onPress}
+                onPress={primaryAction.onPress}
                 disabled={loading}
               >
-                <Icon name={action.icon} size={16} color={action.textColor} />
-                <Text
-                  style={[
-                    styles.secondaryText,
-                    action.label === "Anular" && styles.dangerText
-                  ]}
-                >
-                  {action.label}
+                <Icon name={primaryAction.icon} size={18} color={primaryAction.textColor} />
+                <Text style={[styles.primaryText, { color: primaryAction.textColor }]}>
+                  {primaryAction.label}
                 </Text>
               </TouchableOpacity>
-            ))}
+            )}
+
+            <View style={styles.secondaryContainer}>
+              {secondaryActions.map((action, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.secondaryButton,
+                    action.label === "Anular" && styles.dangerButton,
+                  ]}
+                  onPress={action.onPress}
+                  disabled={loading}
+                >
+                  <Icon name={action.icon} size={16} color={action.textColor} />
+                  <Text
+                    style={[
+                      styles.secondaryText,
+                      action.label === "Anular" && styles.dangerText,
+                    ]}
+                  >
+                    {action.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
-        </View>
+        )}
 
         {/* COMENTARIOS */}
         <View style={styles.card}>
-
+          <View style={styles.row}>
+            <Icon name="message-circle" size={14} color="#000000" />
+            <Text style={styles.text}>
+              <Text style={styles.labelSla}>COMENTARIOS</Text>
+            </Text>
+          </View>
           {comments.length === 0 ? (
             <Text>No hay comentarios</Text>
           ) : (
             (Array.isArray(comments) ? comments : []).map(renderCommentItem)
           )}
 
-          <View style={{ marginTop: 6 }}>
-            <TextInput
-              style={styles.input}
-              placeholder="Añadir un comentario..."
-              value={comment}
-              onChangeText={setComment}
-              multiline
-            />
-          </View>
+          {stateId !== 3 && stateId !== 4 && (
+            <>
+              <View style={{ marginTop: 6 }}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Añadir un comentario..."
+                  value={comment}
+                  onChangeText={setComment}
+                  multiline
+                />
+              </View>
 
-          {/* IMAGES PREVIEW */}
-          {images.length > 0 && (
-            <View style={styles.imageRow}>
-              {images.map((img, index) => (
-                <View key={index} style={styles.imageBox}>
-                  <Image source={{ uri: img.uri }} style={styles.previewImage} />
+              {/* IMAGES PREVIEW */}
+              {images.length > 0 && (
+                <View style={styles.imageRow}>
+                  {images.map((img, index) => (
+                    <View key={index} style={styles.imageBox}>
+                      <Image source={{ uri: img.uri }} style={styles.previewImage} />
+                      <TouchableOpacity
+                        style={styles.removeBtn}
+                        onPress={() => removeImage(index)}
+                      >
+                        <Icon name="x" size={14} color="#fff" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
 
-                  <TouchableOpacity
-                    style={styles.removeBtn}
-                    onPress={() => removeImage(index)}
-                  >
-                    <Icon name="x" size={14} color="#fff" />
+              {/* FOOTER */}
+              <View style={styles.footer}>
+                <TouchableOpacity
+                  style={styles.checkbox}
+                  onPress={() =>
+                    setCommentType(commentType === "publico" ? "interno" : "publico")
+                  }
+                >
+                  <Icon
+                    name={commentType === "interno" ? "check-square" : "square"}
+                    size={18}
+                    color={commentType === "interno" ? "#2563eb" : "#64748b"}
+                  />
+                </TouchableOpacity>
+
+                <View style={styles.internalComment}>
+                  <Icon
+                    name={commentType === "interno" ? "lock" : "unlock"}
+                    size={14}
+                    color="#64748b"
+                  />
+                  <Text style={styles.internalText}>
+                    {commentType === "interno" ? "Comentario interno" : "Comentario público"}
+                  </Text>
+                </View>
+
+                <View style={styles.leftActions}>
+                  <TouchableOpacity style={styles.iconBtn} onPress={openCamera}>
+                    <Icon name="camera" size={18} color="#64748b" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.iconBtn} onPress={openImagePicker}>
+                    <Icon name="image" size={18} color="#64748b" />
                   </TouchableOpacity>
                 </View>
-              ))}
-            </View>
-          )}
+              </View>
 
-          {/* FOOTER */}
-          <View style={styles.footer}>
-
-            {/* CHECKBOX */}
-            <TouchableOpacity
-              style={styles.checkbox}
-              onPress={() =>
-                setCommentType(
-                  commentType === "publico" ? "interno" : "publico"
-                )
-              }
-            >
-              <Icon
-                name={commentType === "interno" ? "check-square" : "square"}
-                size={18}
-                color={commentType === "interno" ? "#2563eb" : "#64748b"}
-              />
-            </TouchableOpacity>
-
-            {/* TEXTO ESTADO */}
-            <View style={styles.internalComment}>
-              <Icon
-                name={commentType === "interno" ? "lock" : "unlock"}
-                size={14}
-                color="#64748b"
-              />
-              <Text style={styles.internalText}>
-                {commentType === "interno"
-                  ? "Comentario interno"
-                  : "Comentario público"}
+              <Text style={styles.helperText}>
+                Puedes adjuntar varios archivos (máx. 10 MB c/u)
               </Text>
-            </View>
-
-            {/* ATTACH */}
-            <View style={styles.leftActions}>
-              <TouchableOpacity
-                style={styles.iconBtn}
-                onPress={openCamera}
-              >
-                <Icon name="camera" size={18} color="#64748b" />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.iconBtn}
-                onPress={openImagePicker}
-              >
-                <Icon name="image" size={18} color="#64748b" />
-              </TouchableOpacity>
-            </View>
-
-          </View>
-
-          {/* TEXTO ABAJO */}
-          <Text style={styles.helperText}>
-            Puedes adjuntar varios archivos (máx. 10 MB c/u)
-          </Text>
+            </>
+          )}
         </View>
 
         {/* SEND */}
-        <TouchableOpacity
-          style={[styles.sendBtn, loading && { opacity: 0.6 }]}
-          onPress={handleSend}
-          disabled={loading}
-        >
-          <Icon name="send" size={16} color="#fff" />
-          <Text style={styles.btnText}>
-            {loading ? "Enviando..." : "Enviar"}
-          </Text>
-        </TouchableOpacity>
-      </ScrollView >
+        {stateId !== 3 && stateId !== 4 && (
+          <>
+            <TouchableOpacity
+              style={[styles.sendBtn, (loading || isBlocked) && { opacity: 0.6 }]}
+              onPress={handleSend}
+              disabled={loading || isBlocked}
+            >
+              <Icon name="send" size={16} color="#fff" />
+              <Text style={styles.btnText}>
+                {loading ? "Enviando..." : "Enviar"}
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </ScrollView>
 
       {/* MODAL FINALIZAR */}
       <ModalFinalizarScreen
         visible={modalVisible}
-        request={request}
-        onClose={() => {
-          console.log("CLOSE MODAL");
+        request={currentRequest}
+        onClose={() => setModalVisible(false)}
+        onSubmit={async () => {  // ✅ sin parámetros
           setModalVisible(false);
-        }}
-        onSubmit={(data) => {
-          console.log("FINALIZAR TICKET:", data);
-          setModalVisible(false);
+          await loadTicket();
+          await loadComments();
         }}
         setLoading={setLoading}
         setModalVisible={setModalVisible}
@@ -635,26 +638,36 @@ export default function RequestDetailScreen() {
       {/* MODAL ANULAR */}
       <ModalAnularScreen
         visible={modalVisibleAnular}
-        request={request}
-        onClose={() => setModalVisibleAnular(false)}  // Cierra el modal
-        onSubmit={setModalVisibleAnular}  // Maneja la lógica cuando se anule el ticket
-        setLoading={setLoading}  // Pasamos el setLoading
-        setModalVisible={setModalVisibleAnular}  // Pasamos setModalVisibleAnular
+        request={currentRequest}
+        onClose={() => setModalVisibleAnular(false)}
+        onSubmit={async () => {
+          setModalVisibleAnular(false);
+          await loadTicket();
+          await loadComments();
+        }}
+        setLoading={setLoading}
+        setModalVisible={setModalVisibleAnular}
       />
 
-      {/* MODAL ASIGNAR */}
+      {/* MODAL ESCALAR */}
       <ModalEscalarScreen
         visible={modalVisibleAsignar}
-        request={request}
-        onClose={() => setModalVisibleAsignar(false)}  // Cierra el modal
-        onSubmit={setModalVisibleAsignar}  // Maneja la lógica cuando se anule el ticket
-        setLoading={setLoading}  // Pasamos el setLoading
-        setModalVisible={setModalVisibleAsignar}  // Pasamos setModalVisibleAsignar
+        request={currentRequest}
+        onClose={() => setModalVisibleAsignar(false)}
+        onSubmit={async () => {
+          setModalVisibleAsignar(false);
+          await loadTicket();
+          await loadComments();
+        }}
+        setLoading={setLoading}
+        setModalVisible={setModalVisibleAsignar}
       />
 
-    </View >
+    </View>
+    </KeyboardAvoidingView>
   );
 }
+
 
 /* ---------------- HELPERS ---------------- */
 
