@@ -17,6 +17,14 @@ import { Header } from "../components/Header";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 
+/* ---------------- MAPA FILTRO → STATUS_ID DEL BACKEND ---------------- */
+const filterToStatusId: Record<string, number> = {
+  abiertas:    1,
+  proceso:     2,
+  finalizadas: 3,
+  vencidas:    4,
+};
+
 export default function DashboardScreen() {
   const navigation = useNavigation<any>();
   const { logout } = useAuth();
@@ -35,21 +43,9 @@ export default function DashboardScreen() {
     overdueRequests: 0,
   });
 
-  /* ---------------- FILTER MAP — fuera de loadTickets ---------------- */
-  const filterMap: Record<string, (t: any) => boolean> = {
-    abiertas:    (t) => t.state?.id === 1,
-    proceso:     (t) => t.state?.id === 2,
-    finalizadas: (t) => t.state?.id === 3,
-    vencidas:    (t) => t.state?.id === 4,
-  };
-
-  //Se recalcula cada vez que cambia tickets o activeFilter
-  const filteredTickets = activeFilter
-    ? tickets.filter(filterMap[activeFilter])
-    : tickets;
-
   /* ---------------- LOAD TICKETS ---------------- */
-  const loadTickets = async () => {
+  // filter: null = sin filtro (todos), string = filtro activo
+  const loadTickets = async (filter: string | null = null) => {
     try {
       setLoading(true);
 
@@ -63,6 +59,17 @@ export default function DashboardScreen() {
         return;
       }
 
+      // ✅ Construye params según el filtro activo
+      const params: Record<string, any> = {
+        per_page: 50,
+      };
+
+      if (filter && filterToStatusId[filter]) {
+        params.status_id = filterToStatusId[filter];
+      }
+
+      console.log("📤 Enviando params a la API:", params);
+
       const response = await axios.get(
         "https://devticket.uchilefau.cl/api/tickets",
         {
@@ -71,6 +78,7 @@ export default function DashboardScreen() {
             "X-Tenant": tenantStored,
             Accept: "application/json",
           },
+          params, // axios serializa: ?status_id=2&per_page=50
         }
       );
 
@@ -78,9 +86,9 @@ export default function DashboardScreen() {
       console.log("📥 API RESPONSE:", data);
 
       const counts = data?.meta?.counts ?? {};
+      console.log("📥 counts:", counts);
 
-      console.log("📥 countsss:", counts);
-
+      // Las métricas siempre vienen del meta, independiente del filtro
       setMetrics({
         openRequests:    counts.bandeja_entrada ?? 0,
         inProgress:      counts.en_proceso ?? 0,
@@ -97,7 +105,7 @@ export default function DashboardScreen() {
   };
 
   useEffect(() => {
-    loadTickets();
+    loadTickets(); // carga inicial sin filtro
   }, []);
 
   /* ---------------- HANDLERS ---------------- */
@@ -106,14 +114,19 @@ export default function DashboardScreen() {
   };
 
   const handleFilterPress = (filter: string) => {
-    // Toca el mismo filtro activo → lo desactiva
-    setActiveFilter((prev) => (prev === filter ? null : filter));
-    setShowAll(false); // resetea "ver todas" al cambiar filtro
+    // Si toca el mismo filtro activo → desactiva y trae todos
+    const nuevoFiltro = activeFilter === filter ? null : filter;
+
+    console.log("🔍 Filtro seleccionado:", nuevoFiltro ?? "ninguno");
+
+    setActiveFilter(nuevoFiltro);
+    setShowAll(false);
+    loadTickets(nuevoFiltro); // ✅ llama a la API con status_id
   };
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await loadTickets();
+    await loadTickets(activeFilter); // ✅ respeta el filtro activo al refrescar
     setIsRefreshing(false);
   };
 
@@ -192,13 +205,12 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* LOADING */}
+        {/* LISTA */}
         {loading ? (
-          <ActivityIndicator size="large" color="#007aff" />
+          <ActivityIndicator size="large" color="#007aff" style={{ marginTop: 20 }} />
         ) : (
           <>
             <View style={styles.section}>
-              {/* ✅ Título cambia según filtro activo */}
               <Text style={styles.sectionTitle}>{sectionTitle}</Text>
 
               <TouchableOpacity onPress={() => setShowAll(!showAll)}>
@@ -208,37 +220,35 @@ export default function DashboardScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* ✅ Lista usa filteredTickets */}
-            {filteredTickets.length === 0 ? (
+            {/* ✅ tickets ya vienen filtrados del backend */}
+            {tickets.length === 0 ? (
               <Text style={styles.emptyText}>
-                No hay solicitudes {activeFilter ? `en "${sectionTitle}"` : ""}
+                No hay solicitudes{activeFilter ? ` en "${sectionTitle}"` : ""}
               </Text>
             ) : (
-              (showAll ? filteredTickets : filteredTickets.slice(0, 3)).map(
-                (request, index) => (
-                  <Animatable.View
-                    key={request.id || index}
-                    animation="fadeInUp"
-                    delay={index * 100}
-                  >
-                    <RequestCard
-                      id={request.id}
-                      title={request.subject}
-                      status={request.state?.name?.toLowerCase()}
-                      priority={request.priority?.name?.toLowerCase()}
-                      category={request.category?.name || "Sin categoría"}
-                      assignedUser={request.assigned_user?.name}
-                      assignedGroup={request.assigned_group?.name}
-                      createdAt={formatDate(request.created_at)}
-                      slaStatus="ok"
-                      slaLabel="--"
-                      slaCommen={request.sla}
-                      updateAt={formatDate(request.updated_at)}
-                      onClick={() => handleRequestClick(request)}
-                    />
-                  </Animatable.View>
-                )
-              )
+              (showAll ? tickets : tickets.slice(0, 3)).map((request, index) => (
+                <Animatable.View
+                  key={request.id || index}
+                  animation="fadeInUp"
+                  delay={index * 100}
+                >
+                  <RequestCard
+                    id={request.id}
+                    title={request.subject}
+                    status={request.state?.name?.toLowerCase()}
+                    priority={request.priority?.name?.toLowerCase()}
+                    category={request.category?.name || "Sin categoría"}
+                    assignedUser={request.assigned_user?.name}
+                    assignedGroup={request.assigned_group?.name}
+                    createdAt={formatDate(request.created_at)}
+                    slaStatus="ok"
+                    slaLabel="--"
+                    slaCommen={request.sla}
+                    updateAt={formatDate(request.updated_at)}
+                    onClick={() => handleRequestClick(request)}
+                  />
+                </Animatable.View>
+              ))
             )}
           </>
         )}
