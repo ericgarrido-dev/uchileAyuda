@@ -6,6 +6,7 @@ import {
   ScrollView,
   Dimensions,
   RefreshControl,
+  ActivityIndicator,
 } from "react-native";
 
 import { LineChart, BarChart, PieChart } from "react-native-chart-kit";
@@ -139,9 +140,7 @@ export default function StatsScreen() {
 
         {/* LOADING */}
         {loading ? (
-          <Text style={{ textAlign: "center", marginTop: 20 }}>
-            Cargando...
-          </Text>
+           <ActivityIndicator size="large" color="#007aff" style={{ marginTop: 20 }} />
         ) : (
           <>
             {/* LINE CHART */}

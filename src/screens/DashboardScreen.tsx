@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   RefreshControl,
 } from "react-native";
 import Icon from "react-native-vector-icons/Feather";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import * as Animatable from "react-native-animatable";
 import { RequestCard } from "../components/RequestCard";
 import { useAuth } from "../context/AuthContext";
@@ -19,10 +19,10 @@ import axios from "axios";
 
 /* ---------------- MAPA FILTRO → STATUS_ID DEL BACKEND ---------------- */
 const filterToStatusId: Record<string, number> = {
-  abiertas:    1,
-  proceso:     2,
+  abiertas: 1,
+  proceso: 2,
   finalizadas: 3,
-  vencidas:    4,
+  vencidas: 4,
 };
 
 export default function DashboardScreen() {
@@ -90,9 +90,9 @@ export default function DashboardScreen() {
 
       // Las métricas siempre vienen del meta, independiente del filtro
       setMetrics({
-        openRequests:    counts.bandeja_entrada ?? 0,
-        inProgress:      counts.en_proceso ?? 0,
-        closedRequests:  counts.cerrados ?? 0,
+        openRequests: counts.bandeja_entrada ?? 0,
+        inProgress: counts.en_proceso ?? 0,
+        closedRequests: counts.cerrados ?? 0,
         overdueRequests: counts.anulados ?? 0,
       });
 
@@ -104,9 +104,11 @@ export default function DashboardScreen() {
     }
   };
 
-  useEffect(() => {
-    loadTickets(); // carga inicial sin filtro
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadTickets(activeFilter);
+    }, [activeFilter])
+  );
 
   /* ---------------- HANDLERS ---------------- */
   const handleRequestClick = (request: any) => {
@@ -133,9 +135,9 @@ export default function DashboardScreen() {
   /* ---------------- FORMAT DATE ---------------- */
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    const day   = String(date.getDate()).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
     const month = String(date.getMonth() + 1).padStart(2, "0");
-    const year  = date.getFullYear();
+    const year = date.getFullYear();
     return `${day}-${month}-${year}`;
   };
 

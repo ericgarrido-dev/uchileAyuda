@@ -43,7 +43,7 @@ export default function RequestDetailScreen() {
   const [modalVisibleAsignar, setModalVisibleAsignar] = useState(false);
   const [commentType, setCommentType] = useState<"publico" | "interno">("publico");
 
-  // ✅ Estado local del ticket — se actualiza tras acciones
+  //Estado local del ticket — se actualiza tras acciones
   const [currentRequest, setCurrentRequest] = useState(route.params?.request);
 
   /* ---------------- LOAD TENANT & TOKEN ---------------- */
@@ -271,7 +271,7 @@ export default function RequestDetailScreen() {
     setModalVisibleAnular(true);
   };
 
-  // ✅ Usa currentRequest para que reaccione a cambios
+  //Usa currentRequest para que reaccione a cambios
   const stateId = currentRequest?.state?.id;
   const isBlocked = stateId === 3 || stateId === 4;
 
@@ -286,10 +286,15 @@ export default function RequestDetailScreen() {
       ? []
       : stateId === 2
         ? baseActions
-        : [
-          { label: "Tomar ticket", icon: "user-check", color: "rgba(61, 123, 186, 0.57)", textColor: "#0d6efd", onPress: handleTake },
-          ...baseActions,
-        ];
+        : stateId === 1
+          ? [
+            //Solo "Tomar ticket"
+            { label: "Tomar ticket", icon: "user-check", color: "rgba(61, 123, 186, 0.57)", textColor: "#0d6efd", onPress: handleTake },
+          ]
+          : [
+            { label: "Tomar ticket", icon: "user-check", color: "rgba(61, 123, 186, 0.57)", textColor: "#0d6efd", onPress: handleTake },
+            ...baseActions,
+          ];
 
   const primaryAction = actions[0];
   const secondaryActions = actions.slice(1);
@@ -338,332 +343,332 @@ export default function RequestDetailScreen() {
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-    <View style={styles.container}>
+      <View style={styles.container}>
 
-      {/* HEADER */}
-      <Animatable.View animation="fadeInDown" style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.headerSubtitle}>Bienvenido a</Text>
-          <Text style={styles.headerTitle}>
-            {tenant ? `${tenant}.uchile.cl` : "ayuda.uchile.cl"}
+        {/* HEADER */}
+        <Animatable.View animation="fadeInDown" style={styles.header}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerSubtitle}>Bienvenido a</Text>
+            <Text style={styles.headerTitle}>
+              {tenant ? `${tenant}.uchile.cl` : "ayuda.uchile.cl"}
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.logout} onPress={logout}>
+            <Icon name="log-out" size={16} color="#fff" />
+          </TouchableOpacity>
+        </Animatable.View>
+
+        {/* SUB HEADER */}
+        <View style={styles.headerTwo}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Icon name="arrow-left" size={22} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitleTwo}>
+            Solicitud #{currentRequest?.id}
           </Text>
         </View>
-        <TouchableOpacity style={styles.logout} onPress={logout}>
-          <Icon name="log-out" size={16} color="#fff" />
-        </TouchableOpacity>
-      </Animatable.View>
 
-      {/* SUB HEADER */}
-      <View style={styles.headerTwo}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="arrow-left" size={22} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitleTwo}>
-          Solicitud #{currentRequest?.id}
-        </Text>
-      </View>
+        <ScrollView
+          contentContainerStyle={styles.contentContainer}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              colors={["#2563eb"]}
+            />
+          }
+        >
 
-      <ScrollView
-        contentContainerStyle={styles.contentContainer}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            colors={["#2563eb"]}
-          />
-        }
-      >
-
-        {/* INFO CARD — ✅ todo usa currentRequest */}
-        <View style={styles.card}>
-          <Text style={styles.title}>{currentRequest?.subject}</Text>
-          <Text style={styles.sub}>
-            {currentRequest?.created_at
-              ? formatDateTime(currentRequest.created_at)
-              : "Sin fecha"}
-          </Text>
-
-          {/* TAGS */}
-          <View style={styles.tags}>
-            <Text style={[styles.tag, getStatusColor(currentRequest?.state?.name)]}>
-              {currentRequest?.state?.name ?? "Sin estado"}
-            </Text>
-            <Text style={[styles.tag, getPriorityColor(currentRequest?.priority?.name)]}>
-              {currentRequest?.priority?.name ?? "Sin prioridad"}
-            </Text>
-            <Text style={styles.category}>
-              {currentRequest?.category?.name ?? "Sin categoria"}
-            </Text>
-          </View>
-
-          <View style={styles.row}>
-            <Icon name="user" size={14} color="#64748b" style={{ marginRight: 6 }} />
-            <Text style={styles.text}>
-              <Text style={styles.label}>Asignado a: </Text>
-              <Text style={styles.value}>
-                {currentRequest?.assigned_user?.name ?? "Sin asignar"}
-              </Text>
-            </Text>
-          </View>
-
-          <View style={styles.row}>
-            <Icon name="users" size={14} color="#64748b" style={{ marginRight: 6 }} />
-            <Text style={styles.text}>
-              <Text style={styles.label}>Grupo: </Text>
-              <Text style={styles.value}>
-                {currentRequest?.assigned_group?.name ?? "Sin grupo"}
-              </Text>
-            </Text>
-          </View>
-
-          <View style={styles.row}>
-            <Icon name="tag" size={14} color="#64748b" style={{ marginRight: 6 }} />
-            <Text style={styles.text}>
-              <Text style={styles.label}>Creación: </Text>
-              <Text style={styles.value}>
-                {currentRequest?.created_at
-                  ? formatDate(currentRequest.created_at)
-                  : "Sin fecha"}
-              </Text>
-            </Text>
-          </View>
-        </View>
-
-        {/* SLA — ✅ usa currentRequest */}
-        <View style={styles.card}>
-          <View style={styles.row}>
-            <Icon name="clock" size={14} color="#000000" />
-            <Text style={styles.text}>
-              <Text style={styles.labelSla}>SLA</Text>
-            </Text>
-          </View>
-
-          <View style={styles.rowSla}>
-            <Text style={styles.label}>Toma</Text>
-            <View style={styles.valueContainer}>
-              <Icon name="clock" size={14} color="#10b880" />
-              <Text style={styles.valueGreen}>
-                {currentRequest?.sla?.toma_horas ?? "0"}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.rowSla}>
-            <Text style={styles.label}>Respuesta</Text>
-            <View style={styles.valueContainer}>
-              <Icon name="clock" size={14} color="#10b880" />
-              <Text style={styles.valueGreen}>
-                {currentRequest?.sla?.respuesta_horas ?? "0"}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.rowSla}>
-            <Text style={styles.label}>Resolución</Text>
-            <View style={styles.valueContainer}>
-              <Icon name="clock" size={14} color="#f59d0b" />
-              <Text style={styles.valueOrange}>
-                {currentRequest?.sla?.resolucion_horas ?? "0"}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-
-        {/* ACCIONES */}
-        {stateId !== 3 && stateId !== 4 && (
+          {/* INFO CARD — ✅ todo usa currentRequest */}
           <View style={styles.card}>
-            <Text style={styles.labelSla}>ACCIONES</Text>
+            <Text style={styles.title}>{currentRequest?.subject}</Text>
+            <Text style={styles.sub}>
+              {currentRequest?.created_at
+                ? formatDateTime(currentRequest.created_at)
+                : "Sin fecha"}
+            </Text>
 
-            {primaryAction && (
-              <TouchableOpacity
-                style={[
-                  styles.primaryButton,
-                  { backgroundColor: primaryAction.color },
-                  loading && { opacity: 0.6 },
-                ]}
-                onPress={primaryAction.onPress}
-                disabled={loading}
-              >
-                <Icon name={primaryAction.icon} size={18} color={primaryAction.textColor} />
-                <Text style={[styles.primaryText, { color: primaryAction.textColor }]}>
-                  {primaryAction.label}
+            {/* TAGS */}
+            <View style={styles.tags}>
+              <Text style={[styles.tag, getStatusColor(currentRequest?.state?.name)]}>
+                {currentRequest?.state?.name ?? "Sin estado"}
+              </Text>
+              <Text style={[styles.tag, getPriorityColor(currentRequest?.priority?.name)]}>
+                {currentRequest?.priority?.name ?? "Sin prioridad"}
+              </Text>
+              <Text style={styles.category}>
+                {currentRequest?.category?.name ?? "Sin categoria"}
+              </Text>
+            </View>
+
+            <View style={styles.row}>
+              <Icon name="user" size={14} color="#64748b" style={{ marginRight: 6 }} />
+              <Text style={styles.text}>
+                <Text style={styles.label}>Asignado a: </Text>
+                <Text style={styles.value}>
+                  {currentRequest?.assigned_user?.name ?? "Sin asignar"}
                 </Text>
-              </TouchableOpacity>
-            )}
+              </Text>
+            </View>
 
-            <View style={styles.secondaryContainer}>
-              {secondaryActions.map((action, index) => (
+            <View style={styles.row}>
+              <Icon name="users" size={14} color="#64748b" style={{ marginRight: 6 }} />
+              <Text style={styles.text}>
+                <Text style={styles.label}>Grupo: </Text>
+                <Text style={styles.value}>
+                  {currentRequest?.assigned_group?.name ?? "Sin grupo"}
+                </Text>
+              </Text>
+            </View>
+
+            <View style={styles.row}>
+              <Icon name="tag" size={14} color="#64748b" style={{ marginRight: 6 }} />
+              <Text style={styles.text}>
+                <Text style={styles.label}>Creación: </Text>
+                <Text style={styles.value}>
+                  {currentRequest?.created_at
+                    ? formatDate(currentRequest.created_at)
+                    : "Sin fecha"}
+                </Text>
+              </Text>
+            </View>
+          </View>
+
+          {/* SLA — ✅ usa currentRequest */}
+          <View style={styles.card}>
+            <View style={styles.row}>
+              <Icon name="clock" size={14} color="#000000" />
+              <Text style={styles.text}>
+                <Text style={styles.labelSla}>SLA</Text>
+              </Text>
+            </View>
+
+            <View style={styles.rowSla}>
+              <Text style={styles.label}>Toma</Text>
+              <View style={styles.valueContainer}>
+                <Icon name="clock" size={14} color="#10b880" />
+                <Text style={styles.valueGreen}>
+                  {currentRequest?.sla?.toma_horas ?? "0"}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.rowSla}>
+              <Text style={styles.label}>Respuesta</Text>
+              <View style={styles.valueContainer}>
+                <Icon name="clock" size={14} color="#10b880" />
+                <Text style={styles.valueGreen}>
+                  {currentRequest?.sla?.respuesta_horas ?? "0"}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.rowSla}>
+              <Text style={styles.label}>Resolución</Text>
+              <View style={styles.valueContainer}>
+                <Icon name="clock" size={14} color="#f59d0b" />
+                <Text style={styles.valueOrange}>
+                  {currentRequest?.sla?.resolucion_horas ?? "0"}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+
+          {/* ACCIONES */}
+          {stateId !== 3 && stateId !== 4 && (
+            <View style={styles.card}>
+              <Text style={styles.labelSla}>ACCIONES</Text>
+
+              {primaryAction && (
                 <TouchableOpacity
-                  key={index}
                   style={[
-                    styles.secondaryButton,
-                    action.label === "Anular" && styles.dangerButton,
+                    styles.primaryButton,
+                    { backgroundColor: primaryAction.color },
+                    loading && { opacity: 0.6 },
                   ]}
-                  onPress={action.onPress}
+                  onPress={primaryAction.onPress}
                   disabled={loading}
                 >
-                  <Icon name={action.icon} size={16} color={action.textColor} />
-                  <Text
-                    style={[
-                      styles.secondaryText,
-                      action.label === "Anular" && styles.dangerText,
-                    ]}
-                  >
-                    {action.label}
+                  <Icon name={primaryAction.icon} size={18} color={primaryAction.textColor} />
+                  <Text style={[styles.primaryText, { color: primaryAction.textColor }]}>
+                    {primaryAction.label}
                   </Text>
                 </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* COMENTARIOS */}
-        <View style={styles.card}>
-          <View style={styles.row}>
-            <Icon name="message-circle" size={14} color="#000000" />
-            <Text style={styles.text}>
-              <Text style={styles.labelSla}>COMENTARIOS</Text>
-            </Text>
-          </View>
-          {comments.length === 0 ? (
-            <Text>No hay comentarios</Text>
-          ) : (
-            (Array.isArray(comments) ? comments : []).map(renderCommentItem)
-          )}
-
-          {stateId !== 3 && stateId !== 4 && (
-            <>
-              <View style={{ marginTop: 6 }}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Añadir un comentario..."
-                  value={comment}
-                  onChangeText={setComment}
-                  multiline
-                />
-              </View>
-
-              {/* IMAGES PREVIEW */}
-              {images.length > 0 && (
-                <View style={styles.imageRow}>
-                  {images.map((img, index) => (
-                    <View key={index} style={styles.imageBox}>
-                      <Image source={{ uri: img.uri }} style={styles.previewImage} />
-                      <TouchableOpacity
-                        style={styles.removeBtn}
-                        onPress={() => removeImage(index)}
-                      >
-                        <Icon name="x" size={14} color="#fff" />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </View>
               )}
 
-              {/* FOOTER */}
-              <View style={styles.footer}>
-                <TouchableOpacity
-                  style={styles.checkbox}
-                  onPress={() =>
-                    setCommentType(commentType === "publico" ? "interno" : "publico")
-                  }
-                >
-                  <Icon
-                    name={commentType === "interno" ? "check-square" : "square"}
-                    size={18}
-                    color={commentType === "interno" ? "#2563eb" : "#64748b"}
-                  />
-                </TouchableOpacity>
-
-                <View style={styles.internalComment}>
-                  <Icon
-                    name={commentType === "interno" ? "lock" : "unlock"}
-                    size={14}
-                    color="#64748b"
-                  />
-                  <Text style={styles.internalText}>
-                    {commentType === "interno" ? "Comentario interno" : "Comentario público"}
-                  </Text>
-                </View>
-
-                <View style={styles.leftActions}>
-                  <TouchableOpacity style={styles.iconBtn} onPress={openCamera}>
-                    <Icon name="camera" size={18} color="#64748b" />
+              <View style={styles.secondaryContainer}>
+                {secondaryActions.map((action, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.secondaryButton,
+                      action.label === "Anular" && styles.dangerButton,
+                    ]}
+                    onPress={action.onPress}
+                    disabled={loading}
+                  >
+                    <Icon name={action.icon} size={16} color={action.textColor} />
+                    <Text
+                      style={[
+                        styles.secondaryText,
+                        action.label === "Anular" && styles.dangerText,
+                      ]}
+                    >
+                      {action.label}
+                    </Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.iconBtn} onPress={openImagePicker}>
-                    <Icon name="image" size={18} color="#64748b" />
-                  </TouchableOpacity>
-                </View>
+                ))}
               </View>
+            </View>
+          )}
 
-              <Text style={styles.helperText}>
-                Puedes adjuntar varios archivos (máx. 10 MB c/u)
+          {/* COMENTARIOS */}
+          <View style={styles.card}>
+            <View style={styles.row}>
+              <Icon name="message-circle" size={14} color="#000000" />
+              <Text style={styles.text}>
+                <Text style={styles.labelSla}>COMENTARIOS</Text>
               </Text>
+            </View>
+            {comments.length === 0 ? (
+              <Text>No hay comentarios</Text>
+            ) : (
+              (Array.isArray(comments) ? comments : []).map(renderCommentItem)
+            )}
+
+            {stateId !== 3 && stateId !== 4 && (
+              <>
+                <View style={{ marginTop: 6 }}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Añadir un comentario..."
+                    value={comment}
+                    onChangeText={setComment}
+                    multiline
+                  />
+                </View>
+
+                {/* IMAGES PREVIEW */}
+                {images.length > 0 && (
+                  <View style={styles.imageRow}>
+                    {images.map((img, index) => (
+                      <View key={index} style={styles.imageBox}>
+                        <Image source={{ uri: img.uri }} style={styles.previewImage} />
+                        <TouchableOpacity
+                          style={styles.removeBtn}
+                          onPress={() => removeImage(index)}
+                        >
+                          <Icon name="x" size={14} color="#fff" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {/* FOOTER */}
+                <View style={styles.footer}>
+                  <TouchableOpacity
+                    style={styles.checkbox}
+                    onPress={() =>
+                      setCommentType(commentType === "publico" ? "interno" : "publico")
+                    }
+                  >
+                    <Icon
+                      name={commentType === "interno" ? "check-square" : "square"}
+                      size={18}
+                      color={commentType === "interno" ? "#2563eb" : "#64748b"}
+                    />
+                  </TouchableOpacity>
+
+                  <View style={styles.internalComment}>
+                    <Icon
+                      name={commentType === "interno" ? "lock" : "unlock"}
+                      size={14}
+                      color="#64748b"
+                    />
+                    <Text style={styles.internalText}>
+                      {commentType === "interno" ? "Comentario interno" : "Comentario público"}
+                    </Text>
+                  </View>
+
+                  <View style={styles.leftActions}>
+                    <TouchableOpacity style={styles.iconBtn} onPress={openCamera}>
+                      <Icon name="camera" size={18} color="#64748b" />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.iconBtn} onPress={openImagePicker}>
+                      <Icon name="image" size={18} color="#64748b" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <Text style={styles.helperText}>
+                  Puedes adjuntar varios archivos (máx. 10 MB c/u)
+                </Text>
+              </>
+            )}
+          </View>
+
+          {/* SEND */}
+          {stateId !== 3 && stateId !== 4 && (
+            <>
+              <TouchableOpacity
+                style={[styles.sendBtn, (loading || isBlocked) && { opacity: 0.6 }]}
+                onPress={handleSend}
+                disabled={loading || isBlocked}
+              >
+                <Icon name="send" size={16} color="#fff" />
+                <Text style={styles.btnText}>
+                  {loading ? "Enviando..." : "Enviar"}
+                </Text>
+              </TouchableOpacity>
             </>
           )}
-        </View>
+        </ScrollView>
 
-        {/* SEND */}
-        {stateId !== 3 && stateId !== 4 && (
-          <>
-            <TouchableOpacity
-              style={[styles.sendBtn, (loading || isBlocked) && { opacity: 0.6 }]}
-              onPress={handleSend}
-              disabled={loading || isBlocked}
-            >
-              <Icon name="send" size={16} color="#fff" />
-              <Text style={styles.btnText}>
-                {loading ? "Enviando..." : "Enviar"}
-              </Text>
-            </TouchableOpacity>
-          </>
-        )}
-      </ScrollView>
+        {/* MODAL FINALIZAR */}
+        <ModalFinalizarScreen
+          visible={modalVisible}
+          request={currentRequest}
+          onClose={() => setModalVisible(false)}
+          onSubmit={async () => {  // ✅ sin parámetros
+            setModalVisible(false);
+            await loadTicket();
+            await loadComments();
+          }}
+          setLoading={setLoading}
+          setModalVisible={setModalVisible}
+        />
 
-      {/* MODAL FINALIZAR */}
-      <ModalFinalizarScreen
-        visible={modalVisible}
-        request={currentRequest}
-        onClose={() => setModalVisible(false)}
-        onSubmit={async () => {  // ✅ sin parámetros
-          setModalVisible(false);
-          await loadTicket();
-          await loadComments();
-        }}
-        setLoading={setLoading}
-        setModalVisible={setModalVisible}
-      />
+        {/* MODAL ANULAR */}
+        <ModalAnularScreen
+          visible={modalVisibleAnular}
+          request={currentRequest}
+          onClose={() => setModalVisibleAnular(false)}
+          onSubmit={async () => {
+            setModalVisibleAnular(false);
+            await loadTicket();
+            await loadComments();
+          }}
+          setLoading={setLoading}
+          setModalVisible={setModalVisibleAnular}
+        />
 
-      {/* MODAL ANULAR */}
-      <ModalAnularScreen
-        visible={modalVisibleAnular}
-        request={currentRequest}
-        onClose={() => setModalVisibleAnular(false)}
-        onSubmit={async () => {
-          setModalVisibleAnular(false);
-          await loadTicket();
-          await loadComments();
-        }}
-        setLoading={setLoading}
-        setModalVisible={setModalVisibleAnular}
-      />
+        {/* MODAL ESCALAR */}
+        <ModalEscalarScreen
+          visible={modalVisibleAsignar}
+          request={currentRequest}
+          onClose={() => setModalVisibleAsignar(false)}
+          onSubmit={async () => {
+            setModalVisibleAsignar(false);
+            await loadTicket();
+            await loadComments();
+          }}
+          setLoading={setLoading}
+          setModalVisible={setModalVisibleAsignar}
+        />
 
-      {/* MODAL ESCALAR */}
-      <ModalEscalarScreen
-        visible={modalVisibleAsignar}
-        request={currentRequest}
-        onClose={() => setModalVisibleAsignar(false)}
-        onSubmit={async () => {
-          setModalVisibleAsignar(false);
-          await loadTicket();
-          await loadComments();
-        }}
-        setLoading={setLoading}
-        setModalVisible={setModalVisibleAsignar}
-      />
-
-    </View>
+      </View>
     </KeyboardAvoidingView>
   );
 }

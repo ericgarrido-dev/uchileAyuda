@@ -43,7 +43,7 @@ export default function ModalFinalizarScreen({
 
     const [tenant, setTenant] = useState<string | null>(null);
     const [token, setToken] = useState<string | null>(null);
-
+    const [submitting, setSubmitting] = useState(false);
     const [estadosCierre, setEstadosCierre] = useState<any[]>([]);
     const [loadingEstados, setLoadingEstados] = useState(false);
 
@@ -130,6 +130,7 @@ export default function ModalFinalizarScreen({
 
     /* ---------------- SUBMIT ---------------- */
     const handleSubmit = async () => {
+        if (submitting) return;
         // Verifica que `tipoRespuesta` tenga un valor válido
         if (!comment) {
             Alert.alert("Por favor, ingrese comentario.");
@@ -150,6 +151,7 @@ export default function ModalFinalizarScreen({
         console.log("Finalizar ticket:", payload);  // Solo para verificar
 
         try {
+            setSubmitting(true);
             setLoading(true);  // Activar el estado de carga mientras se procesa
 
             const formData = new FormData();
@@ -210,6 +212,7 @@ export default function ModalFinalizarScreen({
             console.error("Error al finalizar el ticket:", error);
             Alert.alert("Hubo un error al intentar finalizar el ticket.");
         } finally {
+            setSubmitting(false);
             setLoading(false);  // Desactivar el estado de carga
         }
     };
@@ -284,9 +287,14 @@ export default function ModalFinalizarScreen({
                             <Text style={{ color: "#64748b" }}>Cancelar</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity onPress={handleSubmit}>
+                        {/* ✅ disabled mientras loading, opacity para feedback visual */}
+                        <TouchableOpacity
+                            onPress={handleSubmit}
+                            disabled={submitting}
+                            style={{ opacity: submitting ? 0.5 : 1 }}
+                        >
                             <Text style={{ color: "#008236", fontWeight: "bold" }}>
-                                Finalizar
+                                {submitting ? "Finalizando..." : "Finalizar"}
                             </Text>
                         </TouchableOpacity>
                     </View>
