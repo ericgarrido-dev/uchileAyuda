@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1087293753023",
+    "project_id": "ayudauchile",
+    "storage_bucket": "ayudauchile.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1087293753023:android:a2325cf542f98f5aa4a80a",
+        "android_client_info": {
+          "package_name": "com.uchileayuda"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAGVhMMNQosVyIehiveQIpEFLQMwe7Vjuw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

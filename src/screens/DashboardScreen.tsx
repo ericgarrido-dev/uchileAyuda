@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -16,59 +16,65 @@ import { useAuth } from "../context/AuthContext";
 import { Header } from "../components/Header";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
+import api from "../services/api";
 
-/* ---------------- MAPA FILTRO → STATUS_ID DEL BACKEND ---------------- */
+/* ---------------- MAPA FILTRO → STATUS_ID ---------------- */
 const filterToStatusId: Record<string, number> = {
-  abiertas: 1,
-  proceso: 2,
+  abiertas:    1,
+  proceso:     2,
   finalizadas: 3,
-  vencidas: 4,
+  vencidas:    4,
 };
 
 export default function DashboardScreen() {
   const navigation = useNavigation<any>();
   const { logout } = useAuth();
 
-  const [showAll, setShowAll] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [tickets, setTickets] = useState<any[]>([]);
-  const [tenant, setTenant] = useState<string | null>(null);
+  const [showAll,      setShowAll]      = useState(false);
+  const [loading,      setLoading]      = useState(true);
+  const [tickets,      setTickets]      = useState<any[]>([]);
+  const [tenant,       setTenant]       = useState<string | null>(null);
+  const [tenants,      setTenants]      = useState<any[]>([]);   // ← lista completa de tenants
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
 
   const [metrics, setMetrics] = useState({
-    openRequests: 0,
-    inProgress: 0,
-    closedRequests: 0,
+    openRequests:    0,
+    inProgress:      0,
+    closedRequests:  0,
     overdueRequests: 0,
   });
 
+  /* ---------------- LOAD TENANTS ---------------- */
+  // Lee la lista guardada en AsyncStorage al hacer login (ver App.tsx)
+  const loadTenants = async () => {
+    try {
+      const stored = await AsyncStorage.getItem("tenants");
+      if (stored) setTenants(JSON.parse(stored));
+    } catch (e) {
+      console.warn("No se pudieron cargar los tenants:", e);
+    }
+  };
+
   /* ---------------- LOAD TICKETS ---------------- */
-  // filter: null = sin filtro (todos), string = filtro activo
   const loadTickets = async (filter: string | null = null) => {
     try {
       setLoading(true);
 
-      const token = await AsyncStorage.getItem("token");
+      const token        = await AsyncStorage.getItem("token");
       const tenantStored = await AsyncStorage.getItem("tenant_id");
 
       setTenant(tenantStored);
 
       if (!token || !tenantStored) {
-        console.log("❌ Falta token o tenant");
+        console.warn("❌ Falta token o tenant_id en AsyncStorage");
         return;
       }
 
-      // ✅ Construye params según el filtro activo
-      const params: Record<string, any> = {
-        per_page: 50,
-      };
-
+      const params: Record<string, any> = { per_page: 50 };
       if (filter && filterToStatusId[filter]) {
         params.status_id = filterToStatusId[filter];
       }
-
-      console.log("📤 Enviando params a la API:", params);
 
       const response = await axios.get(
         "https://devticket.uchilefau.cl/api/tickets",
@@ -78,66 +84,98 @@ export default function DashboardScreen() {
             "X-Tenant": tenantStored,
             Accept: "application/json",
           },
-          params, // axios serializa: ?status_id=2&per_page=50
+          params,
         }
       );
 
-      const data = response.data;
-      console.log("📥 API RESPONSE:", data);
-
+      const data   = response.data;
       const counts = data?.meta?.counts ?? {};
-      console.log("📥 counts:", counts);
 
-      // Las métricas siempre vienen del meta, independiente del filtro
       setMetrics({
-        openRequests: counts.bandeja_entrada ?? 0,
-        inProgress: counts.en_proceso ?? 0,
-        closedRequests: counts.cerrados ?? 0,
-        overdueRequests: counts.anulados ?? 0,
+        openRequests:    counts.bandeja_entrada ?? 0,
+        inProgress:      counts.en_proceso      ?? 0,
+        closedRequests:  counts.cerrados        ?? 0,
+        overdueRequests: counts.anulados        ?? 0,
       });
 
       setTickets(data?.data ?? []);
     } catch (e) {
-      console.log("❌ ERROR TICKETS:", e);
+      console.error("❌ ERROR TICKETS:", e);
     } finally {
       setLoading(false);
     }
   };
 
+  /* Cada vez que la pantalla toma foco, recarga tenants + tickets */
   useFocusEffect(
     useCallback(() => {
+      loadTenants();
       loadTickets(activeFilter);
     }, [activeFilter])
   );
 
-  /* ---------------- HANDLERS ---------------- */
+  /* ---------------- CAMBIO DE TENANT ---------------- */
+  const handleChangeTenant = async (tenantId: string) => {
+    try {
+      if (tenantId === tenant) return; // ya estamos en ese tenant
+
+      setLoading(true);
+
+      const loginTicket = await AsyncStorage.getItem("login_ticket");
+
+      // Canjear el login_ticket por el token del tenant elegido
+      const response = await api.post('/mobile/auth/select-tenant', {
+        login_ticket: loginTicket,
+        tenant_id:    tenantId,
+      });
+
+      const token =
+        response.data?.token ??
+        response.data?.access_token;
+
+      if (!token) {
+        console.warn("❌ No se recibió token al cambiar tenant");
+        return;
+      }
+
+      // Guardar nuevo token + tenant activo
+      await AsyncStorage.setItem("token",     token);
+      await AsyncStorage.setItem("tenant_id", tenantId);
+
+      // Resetear filtros y recargar con el nuevo tenant
+      setActiveFilter(null);
+      setShowAll(false);
+      await loadTickets(null);
+
+    } catch (e: any) {
+      console.error("❌ Error cambiando tenant:", e);
+    }
+  };
+
+  /* ---------------- OTROS HANDLERS ---------------- */
   const handleRequestClick = (request: any) => {
     navigation.navigate("RequestDetail", { request });
   };
 
   const handleFilterPress = (filter: string) => {
-    // Si toca el mismo filtro activo → desactiva y trae todos
     const nuevoFiltro = activeFilter === filter ? null : filter;
-
-    console.log("🔍 Filtro seleccionado:", nuevoFiltro ?? "ninguno");
-
     setActiveFilter(nuevoFiltro);
     setShowAll(false);
-    loadTickets(nuevoFiltro); // ✅ llama a la API con status_id
+    loadTickets(nuevoFiltro);
   };
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await loadTickets(activeFilter); // ✅ respeta el filtro activo al refrescar
+    await loadTickets(activeFilter);
     setIsRefreshing(false);
   };
 
   /* ---------------- FORMAT DATE ---------------- */
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const day = String(date.getDate()).padStart(2, "0");
+    const date  = new Date(dateString);
+    const day   = String(date.getDate()).padStart(2, "0");
     const month = String(date.getMonth() + 1).padStart(2, "0");
-    const year = date.getFullYear();
+    const year  = date.getFullYear();
     return `${day}-${month}-${year}`;
   };
 
@@ -150,7 +188,17 @@ export default function DashboardScreen() {
   return (
     <View style={styles.container}>
 
-      <Header tenant={tenant} onLogout={logout} />
+      {/*
+        Header ahora recibe:
+        - tenants: muestra el switcher solo si hay más de 1
+        - onChangeTenant: canjea el ticket y recarga los datos
+      */}
+      <Header
+        tenant={tenant}
+        onLogout={logout}
+        tenants={tenants}
+        onChangeTenant={handleChangeTenant}
+      />
 
       <ScrollView
         contentContainerStyle={styles.contentContainer}
@@ -186,7 +234,6 @@ export default function DashboardScreen() {
               onPress={() => handleFilterPress("proceso")}
             />
           </View>
-
           <View style={styles.metricsRow}>
             <MetricCard
               label="Anuladas"
@@ -214,7 +261,6 @@ export default function DashboardScreen() {
           <>
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>{sectionTitle}</Text>
-
               <TouchableOpacity onPress={() => setShowAll(!showAll)}>
                 <Text style={styles.seeAllButton}>
                   {showAll ? "Ver menos" : "Ver todas"}
@@ -222,7 +268,6 @@ export default function DashboardScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* ✅ tickets ya vienen filtrados del backend */}
             {tickets.length === 0 ? (
               <Text style={styles.emptyText}>
                 No hay solicitudes{activeFilter ? ` en "${sectionTitle}"` : ""}

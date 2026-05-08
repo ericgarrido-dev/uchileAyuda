@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import AntDesign from 'react-native-vector-icons/AntDesign';
 import { RutInput } from "./RutInput";
-import { GoogleSignin, statusCodes, } from "@react-native-google-signin/google-signin";
+import { GoogleSignin, statusCodes } from "@react-native-google-signin/google-signin";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ENV } from "../config/env";
 import api from "../services/api";
@@ -21,12 +21,11 @@ interface LoginScreenProps {
   onLogin: (payload: any) => void;
 }
 
-export function LoginScreen({
-  onLogin,
-}: LoginScreenProps) {
+export function LoginScreen({ onLogin }: LoginScreenProps) {
   const [rut, setRut] = useState("");
   const [rutValid, setRutValid] = useState(false);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     GoogleSignin.configure({
@@ -36,13 +35,14 @@ export function LoginScreen({
   }, []);
 
   const handleGoogleLogin = async () => {
+    if (!rutValid) {
+      setError("RUT inválido");
+      return;
+    }
+
     try {
       setError("");
-
-      if (!rutValid) {
-        setError("RUT inválido");
-        return;
-      }
+      setLoading(true);
 
       // Limpiar sesión anterior ANTES de todo
       await AsyncStorage.removeItem("token");
@@ -53,39 +53,40 @@ export function LoginScreen({
       const result = await GoogleSignin.signIn();
 
       const idToken = result.idToken;
-      console.log("📥 TOKEN1:", idToken);
 
       if (!idToken) {
         setError("Error autenticación Google");
         return;
       }
 
-      // Realizamos la solicitud a la API con Axios
       const loginResponse = await api.post('/mobile/auth/google', {
         id_token: idToken,
-        rut: rut,
+        rut,
       });
 
       const loginData = loginResponse.data;
-      console.log("📥 LOGIN RESPONSE:", loginData);
 
-      // Verificar si hay un error en la respuesta
       if (!loginData) {
         setError("Respuesta inválida del servidor");
         return;
       }
 
       /* ---------------- MULTI TENANT ---------------- */
+      // El backend indica que el usuario pertenece a más de un tenant.
+      // No se puede generar token aún — se necesita que el usuario elija.
+      // Se pasa loginTicket + tenants al padre para mostrar la pantalla de selección.
       if (loginData.requires_tenant_selection) {
         onLogin({
           requiresTenantSelection: true,
           loginTicket: loginData.login_ticket,
           tenants: loginData.tenants,
+          // ⚠️ No hay token aquí — se obtiene al seleccionar el tenant
         });
         return;
       }
 
       /* ---------------- SINGLE TENANT ---------------- */
+      // El backend ya sabe a qué tenant pertenece el usuario → devuelve token directo.
       const token = loginData?.token ?? loginData?.access_token;
 
       if (!token) {
@@ -93,20 +94,17 @@ export function LoginScreen({
         return;
       }
 
-      try {
-        await AsyncStorage.setItem("token", token);
-      } catch {
-        console.warn("No se pudo guardar el token");
-      }
+      await AsyncStorage.setItem("token", token);
 
       const meResponse = await api.get('/mobile/me', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       const meData = meResponse.data;
-      console.log("📥 ME:", meData);
+
+      if (meData?.tenant_id) {
+        await AsyncStorage.setItem("tenant_id", String(meData.tenant_id));
+      }
 
       onLogin({
         requiresTenantSelection: false,
@@ -116,8 +114,6 @@ export function LoginScreen({
       });
 
     } catch (e: any) {
-      console.log(e);
-
       if (e?.code === statusCodes.SIGN_IN_CANCELLED) return;
 
       if (e?.response?.data?.message) {
@@ -125,6 +121,8 @@ export function LoginScreen({
       } else {
         setError("Error login Google");
       }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -135,17 +133,14 @@ export function LoginScreen({
     >
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.logoContainer}>
-          <View >
-            <Image
-              source={require("../../assets/logo/ic_launcher.png")}
-              style={styles.logoImage}
-            />
-          </View>
+          <Image
+            source={require("../../assets/logo/ic_launcher.png")}
+            style={styles.logoImage}
+          />
           <Text style={styles.title}>Uchile Ayuda</Text>
-          <Text style={styles.subtitle}>
-            Sistema de gestión institucional
-          </Text>
+          <Text style={styles.subtitle}>Sistema de gestión institucional</Text>
         </View>
+
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Ingreso a la plataforma</Text>
           <Text style={styles.label}>RUT chileno</Text>
@@ -158,19 +153,20 @@ export function LoginScreen({
             }}
           />
           {error ? <ErrorBadge message={error} /> : null}
+
           <TouchableOpacity
-            style={styles.googleButton}
+            style={[styles.googleButton, loading && styles.googleButtonDisabled]}
             onPress={handleGoogleLogin}
+            disabled={loading}
           >
             <AntDesign name="google" size={20} color="#DB4437" />
             <Text style={styles.googleText}>
-              Continuar con Google
+              {loading ? "Iniciando sesión..." : "Continuar con Google"}
             </Text>
           </TouchableOpacity>
         </View>
-        <Text style={styles.footer}>
-          Sistema de gestión · Universidad de Chile
-        </Text>
+
+        <Text style={styles.footer}>Sistema de gestión · Universidad de Chile</Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -180,31 +176,24 @@ export function LoginScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f0f0f0"
+    backgroundColor: "#f0f0f0",
   },
   scrollContainer: {
     padding: 16,
-    alignItems: "center"
+    alignItems: "center",
   },
   logoContainer: {
     alignItems: "center",
     padding: 20,
   },
-  logo: {
-    width: 60,
-    height: 60,
-    backgroundColor: "#007aff",
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-  },
   title: {
     fontSize: 22,
-    fontWeight: "600"
+    fontWeight: "600",
+    marginTop: 8,
   },
   subtitle: {
     fontSize: 12,
-    color: "#666"
+    color: "#666",
   },
   card: {
     width: "100%",
@@ -214,10 +203,10 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: 18,
-    marginBottom: 10
+    marginBottom: 10,
   },
   label: {
-    marginTop: 10
+    marginTop: 10,
   },
   googleButton: {
     backgroundColor: "#fff",
@@ -230,23 +219,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 15,
   },
+  googleButtonDisabled: {
+    opacity: 0.6,
+  },
   googleText: {
     color: "#000",
-    marginLeft: 8
-  },
-  link: {
-    textAlign: "center",
-    marginTop: 10,
-    color: "#007aff",
-  },
-  error: {
-    color: "red",
-    marginTop: 10
+    marginLeft: 8,
   },
   footer: {
     marginTop: 20,
     fontSize: 10,
-    color: "#999"
+    color: "#999",
   },
   logoImage: {
     width: 40,
