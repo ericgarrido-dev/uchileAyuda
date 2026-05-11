@@ -9,15 +9,13 @@ import {
   ScrollView,
   RefreshControl,
 } from "react-native";
-
-import Icon from "react-native-vector-icons/Feather";
 import * as Animatable from 'react-native-animatable';
 import { RequestCard } from "../components/RequestCard";
 import { useNavigation } from "@react-navigation/native";
 import { Header } from "../components/Header";
 import { useAuth } from "../context/AuthContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
+import api from "../services/api";
 
 export default function RequestsListScreen() {
   const navigation = useNavigation<any>();
@@ -41,20 +39,14 @@ export default function RequestsListScreen() {
         return;
       }
 
-      const response = await axios.get(
-        "https://devticket.uchilefau.cl/api/tickets/mis/solicitudes",
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "X-Tenant": tenantStored,
-            Accept: "application/json",
-          },
-        }
-      );
+      const response = await api.get('/tickets/mis/solicitudes', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "X-Tenant": tenantStored,
+        },
+      });
 
-      const data = response.data; // 👈 axios ya parsea JSON
-
-      console.log("📥 API respuesta:", data);
+      const data = response.data;
 
       setTickets(data?.data ?? []);
     } catch (e) {

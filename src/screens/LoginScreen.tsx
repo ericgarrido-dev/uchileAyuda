@@ -9,13 +9,13 @@ import {
   Platform,
   Image,
 } from "react-native";
-import AntDesign from 'react-native-vector-icons/AntDesign';
 import { RutInput } from "./RutInput";
 import { GoogleSignin, statusCodes } from "@react-native-google-signin/google-signin";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ENV } from "../config/env";
 import api from "../services/api";
 import { ErrorBadge } from '../components/ErrorBadge';
+import messaging from "@react-native-firebase/messaging"; // 👈 agregado
 
 interface LoginScreenProps {
   onLogin: (payload: any) => void;
@@ -74,13 +74,12 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
       /* ---------------- MULTI TENANT ---------------- */
       // El backend indica que el usuario pertenece a más de un tenant.
       // No se puede generar token aún — se necesita que el usuario elija.
-      // Se pasa loginTicket + tenants al padre para mostrar la pantalla de selección.
+      // El FCM token se guarda en TenantSelectionScreen una vez que se obtiene el JWT.
       if (loginData.requires_tenant_selection) {
         onLogin({
           requiresTenantSelection: true,
           loginTicket: loginData.login_ticket,
           tenants: loginData.tenants,
-          // ⚠️ No hay token aquí — se obtiene al seleccionar el tenant
         });
         return;
       }
@@ -104,6 +103,26 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
 
       if (meData?.tenant_id) {
         await AsyncStorage.setItem("tenant_id", String(meData.tenant_id));
+      }
+
+      // 👇 Guardar FCM token — aquí el JWT ya está disponible en la variable `token`
+      try {
+        const fcmToken = await messaging().getToken();
+        console.log("🔑 FCM Token (single tenant):", fcmToken);
+
+        await api.post('/mobile/fcm-token', {
+          token: fcmToken,
+          platform: 'android',
+          tenant_id: meData?.tenant_id,
+        }, {
+          headers: {
+            Authorization: `Bearer ${token}`, // 👈 JWT directo, no desde AsyncStorage
+          },
+        });
+
+        console.log("✅ FCM token guardado (single tenant)");
+      } catch (fcmError) {
+        console.log("❌ Error guardando FCM token (single tenant):", fcmError);
       }
 
       onLogin({
@@ -143,7 +162,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Ingreso a la plataforma</Text>
-          <Text style={styles.label}>RUT chileno</Text>
+          <Text style={styles.label}>RUT</Text>
           <RutInput
             value={rut}
             onChange={(v, valid) => {
@@ -159,7 +178,10 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
             onPress={handleGoogleLogin}
             disabled={loading}
           >
-            <AntDesign name="google" size={20} color="#DB4437" />
+            <Image
+              source={require("../../assets/img/google.png")}
+              style={{ width: 20, height: 20, resizeMode: "contain" }}
+            />
             <Text style={styles.googleText}>
               {loading ? "Iniciando sesión..." : "Continuar con Google"}
             </Text>
@@ -172,6 +194,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
   );
 }
 
+
 /* ---------------- STYLES ---------------- */
 const styles = StyleSheet.create({
   container: {
@@ -179,12 +202,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#f0f0f0",
   },
   scrollContainer: {
-    padding: 16,
-    alignItems: "center",
+    flexGrow: 0.5,
+    justifyContent: "center",
+    padding: 24,
   },
   logoContainer: {
     alignItems: "center",
-    padding: 20,
+    marginBottom: 30,
   },
   title: {
     fontSize: 22,
@@ -198,8 +222,12 @@ const styles = StyleSheet.create({
   card: {
     width: "100%",
     backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 20,
+    padding: 24,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
   },
   cardTitle: {
     fontSize: 18,
@@ -227,9 +255,10 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   footer: {
-    marginTop: 20,
+    marginTop: 40,
     fontSize: 10,
     color: "#999",
+    textAlign: "center",
   },
   logoImage: {
     width: 40,

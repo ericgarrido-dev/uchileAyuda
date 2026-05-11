@@ -11,8 +11,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ActivityIndicator,
 } from "react-native";
-
 import Icon from "react-native-vector-icons/Feather";
 import * as Animatable from "react-native-animatable";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -22,6 +22,7 @@ import { useAuth } from "../context/AuthContext";
 import ModalFinalizarScreen from "./ModalFinalizarScreen";
 import ModalAnularScreen from "./ModalAnularScreen";
 import ModalEscalarScreen from "./ModalEscalarScreen";
+import api from "../services/api";
 
 export default function RequestDetailScreen() {
   const navigation = useNavigation<any>();
@@ -30,12 +31,15 @@ export default function RequestDetailScreen() {
 
   const request = route.params?.request;
 
+  console.log('request_verticket', request);
+
   const [comment, setComment] = useState("");
   const [images, setImages] = useState<any[]>([]);
   const [isChecked, setIsChecked] = useState(false);
   const [tenant, setTenant] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingTicket, setLoadingTicket] = useState(true);
   const [comments, setComments] = useState([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
@@ -43,7 +47,7 @@ export default function RequestDetailScreen() {
   const [modalVisibleAsignar, setModalVisibleAsignar] = useState(false);
   const [commentType, setCommentType] = useState<"publico" | "interno">("publico");
 
-  //Estado local del ticket — se actualiza tras acciones
+  // Estado local del ticket — se actualiza tras acciones
   const [currentRequest, setCurrentRequest] = useState(route.params?.request);
 
   /* ---------------- LOAD TENANT & TOKEN ---------------- */
@@ -67,39 +71,24 @@ export default function RequestDetailScreen() {
     load();
   }, [request?.id, token]);
 
-  if (!request) {
-    return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyText}>No hay datos de la solicitud</Text>
-      </View>
-    );
-  }
-
   /* ---------------- LOAD TICKET ---------------- */
   const loadTicket = async () => {
-    if (!token || !request?.id) return;
-
+    if (!token || !request?.id) {
+      console.log("⚠️ loadTicket sin token o id:", { token, id: request?.id });
+      return;
+    }
     try {
-      const response = await fetch(
-        `https://devticket.uchilefau.cl/api/tickets/${request.id}`,
-        {
-          method: "GET",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      const json = await response.json();
-      console.log("LOAD TICKET:", json.data);
-
-      if (response.ok && json.data) {
-        setCurrentRequest(json.data); // ✅ actualiza estado reactivo
-      }
+      setLoadingTicket(true);
+      const response = await api.get(`/tickets/${request.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = response.data?.data;
+      console.log("LOAD TICKET:", data);
+      if (data) setCurrentRequest(data);
     } catch (error) {
       console.log("ERROR CARGANDO TICKET:", error);
+    } finally {
+      setLoadingTicket(false);
     }
   };
 
@@ -108,19 +97,15 @@ export default function RequestDetailScreen() {
     if (!token || !request?.id) return;
 
     try {
-      const response = await fetch(
-        `https://devticket.uchilefau.cl/api/tickets/${request.id}/comments`,
-        {
-          method: "GET",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const response = await api.get(`/tickets/${request.id}/comments`, {
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-      const json = await response.json();
+      const json = response.data;
       console.log("COMMENTS:", json.data);
       setComments(Array.isArray(json.data) ? json.data : []);
     } catch (error) {
@@ -159,58 +144,59 @@ export default function RequestDetailScreen() {
 
   /* ---------------- SEND COMMENT ---------------- */
   const handleSend = async () => {
-    try {
-      setLoading(true);
+  try {
+    setLoading(true);
+    console.log('ala');
 
-      const formData = new FormData();
-      formData.append("comment", comment);
-      formData.append("type", commentType);
+    const formData = new FormData();
+    formData.append("comment", comment);
+    formData.append("type", commentType);
 
-      images.forEach((img, index) => {
-        formData.append("files[]", {
-          uri: img.uri,
-          type: img.type || "image/jpeg",
-          name: img.fileName || `image_${index}.jpg`,
-          nombre: img.fileName || `image_${index}.jpg`,
-        });
-      });
+    images.forEach((img, index) => {
+      formData.append("files[]", {
+        uri: img.uri,
+        type: img.type || "image/jpeg",
+        name: img.fileName || `image_${index}.jpg`,
+      } as any);
+    });
 
-      const ticketId = Number(request.id);
+    const ticketId = Number(request.id);
+    console.log('token:', token);
 
-      const response = await fetch(
-        `https://devticket.uchilefau.cl/api/tickets/${ticketId}/comments`,
-        {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "multipart/form-data",
-            Authorization: `Bearer ${token}`,
-          },
-          body: formData,
-        }
-      );
+    // 👇 formData como body, headers como tercer argumento separado
+    const response = await api.post(
+      `/tickets/${ticketId}/comments`,
+      formData,  //segundo argumento = body
+      {          //tercer argumento = config
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "multipart/form-data",
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
 
-      const data = await response.json();
-      console.log("RESPUESTA API:", data);
+    console.log("RESPUESTA API:", response.data);
+    setComment("");
+    setImages([]);
+    await loadComments();
 
-      setComment("");
-      setImages([]);
-      await loadComments();
-    } catch (error) {
-      console.log("ERROR ENVIANDO:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  } catch (error) {
+    console.log("ERROR ENVIANDO:", error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   /* ---------------- FORMAT DATE ---------------- */
   const formatDateTime = (dateString: string) => {
     const date = new Date(dateString);
     return `${String(date.getDate()).padStart(2, "0")}/${String(
       date.getMonth() + 1
-    ).padStart(2, "0")}/${date.getFullYear()} ${String(
-      date.getHours()
-    ).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}:${String(
+    ).padStart(2, "0")}/${date.getFullYear()} ${String(date.getHours()).padStart(
+      2,
+      "0"
+    )}:${String(date.getMinutes()).padStart(2, "0")}:${String(
       date.getSeconds()
     ).padStart(2, "0")}`;
   };
@@ -224,35 +210,26 @@ export default function RequestDetailScreen() {
 
   /* ---------------- ACCIONES ---------------- */
   const handleTake = async () => {
-    console.log("Tomar ticket", request.id);
-
     try {
-      const response = await fetch(
-        `https://devticket.uchilefau.cl/api/tickets/${request.id}/take`,
-        {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        }
+      const response = await api.post(
+        `/tickets/${request.id}/take`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      const data = await response.json();
+      const data = response.data;
 
-      if (response.ok) {
-        console.log("Ticket tomado:", data);
+      if (data.success) {
         Alert.alert("Éxito", "Ticket tomado correctamente.");
-        await loadTicket();   // ✅ recarga datos frescos del ticket
-        await loadComments(); // ✅ recarga comentarios
+        await loadTicket();
+        await loadComments();
       } else {
-        console.error("Error al tomar el ticket:", data);
         Alert.alert("Error", data?.message || "No se pudo tomar el ticket.");
       }
-    } catch (error) {
-      console.error("Error al hacer la solicitud:", error);
-      Alert.alert("Error", "Problema de conexión o del servidor.");
+    } catch (error: any) {
+      const msg = error?.response?.data?.message;
+      Alert.alert("Error", msg || "Problema de conexión o del servidor.");
+      console.error("Error al tomar el ticket:", error);
     }
   };
 
@@ -271,33 +248,13 @@ export default function RequestDetailScreen() {
     setModalVisibleAnular(true);
   };
 
-  //Usa currentRequest para que reaccione a cambios
-  const stateId = currentRequest?.state?.id;
-  const isBlocked = stateId === 3 || stateId === 4;
-
-  const baseActions = [
-    { label: "Escalar", icon: "arrow-up-circle", color: "rgba(241,245,248,1)", textColor: "#1a1d29", onPress: handleEscalate },
-    { label: "Finalizar", icon: "check-circle", color: "rgba(230,250,238,1)", textColor: "#008236", onPress: handleFinish },
-    { label: "Anular", icon: "x-circle", color: "rgba(255,234,235,1)", textColor: "#c10007", onPress: handleCancel },
-  ];
-
-  const actions =
-    stateId === 3 || stateId === 4
-      ? []
-      : stateId === 2
-        ? baseActions
-        : stateId === 1
-          ? [
-            //Solo "Tomar ticket"
-            { label: "Tomar ticket", icon: "user-check", color: "rgba(61, 123, 186, 0.57)", textColor: "#0d6efd", onPress: handleTake },
-          ]
-          : [
-            { label: "Tomar ticket", icon: "user-check", color: "rgba(61, 123, 186, 0.57)", textColor: "#0d6efd", onPress: handleTake },
-            ...baseActions,
-          ];
-
-  const primaryAction = actions[0];
-  const secondaryActions = actions.slice(1);
+  /* ---------------- REFRESH ---------------- */
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await loadTicket();
+    await loadComments();
+    setIsRefreshing(false);
+  };
 
   /* ---------------- COMMENT ITEM ---------------- */
   interface Comment {
@@ -329,13 +286,80 @@ export default function RequestDetailScreen() {
     </View>
   );
 
-  /* ---------------- REFRESH ---------------- */
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    await loadTicket();   // ✅ también recarga el ticket completo
-    await loadComments();
-    setIsRefreshing(false);
-  };
+  /* ---------------- ACTIONS CONFIG ---------------- */
+  const stateId = currentRequest?.state?.id;
+  const isBlocked = stateId === 3 || stateId === 4;
+
+  const baseActions = [
+    {
+      label: "Escalar",
+      icon: "arrow-up-circle",
+      color: "rgba(241,245,248,1)",
+      textColor: "#1a1d29",
+      onPress: handleEscalate,
+    },
+    {
+      label: "Finalizar",
+      icon: "check-circle",
+      color: "rgba(230,250,238,1)",
+      textColor: "#008236",
+      onPress: handleFinish,
+    },
+    {
+      label: "Anular",
+      icon: "x-circle",
+      color: "rgba(255,234,235,1)",
+      textColor: "#c10007",
+      onPress: handleCancel,
+    },
+  ];
+
+  const actions =
+    stateId === 3 || stateId === 4
+      ? []
+      : stateId === 2
+        ? baseActions
+        : stateId === 1
+          ? [
+            {
+              label: "Tomar ticket",
+              icon: "user-check",
+              color: "rgba(61, 123, 186, 0.57)",
+              textColor: "#0d6efd",
+              onPress: handleTake,
+            },
+          ]
+          : [
+            {
+              label: "Tomar ticket",
+              icon: "user-check",
+              color: "rgba(61, 123, 186, 0.57)",
+              textColor: "#0d6efd",
+              onPress: handleTake,
+            },
+            ...baseActions,
+          ];
+
+  const primaryAction = actions[0];
+  const secondaryActions = actions.slice(1);
+
+  /* ---------------- GUARDS ✅ — después de todas las funciones ---------------- */
+  if (!request?.id) {
+    return (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyText}>No hay datos de la solicitud</Text>
+      </View>
+    );
+  }
+
+  if (loadingTicket && !currentRequest?.subject) {
+    return (
+      <View style={styles.emptyContainer}>
+        <ActivityIndicator size="large" color="#007aff" />
+        <Text style={{ marginTop: 10, color: "#64748b" }}>Cargando ticket...</Text>
+      </View>
+    );
+  }
 
   /* ---------------- RENDER ---------------- */
   return (
@@ -378,8 +402,7 @@ export default function RequestDetailScreen() {
             />
           }
         >
-
-          {/* INFO CARD — ✅ todo usa currentRequest */}
+          {/* INFO CARD */}
           <View style={styles.card}>
             <Text style={styles.title}>{currentRequest?.subject}</Text>
             <Text style={styles.sub}>
@@ -393,7 +416,9 @@ export default function RequestDetailScreen() {
               <Text style={[styles.tag, getStatusColor(currentRequest?.state?.name)]}>
                 {currentRequest?.state?.name ?? "Sin estado"}
               </Text>
-              <Text style={[styles.tag, getPriorityColor(currentRequest?.priority?.name)]}>
+              <Text
+                style={[styles.tag, getPriorityColor(currentRequest?.priority?.name)]}
+              >
                 {currentRequest?.priority?.name ?? "Sin prioridad"}
               </Text>
               <Text style={styles.category}>
@@ -434,7 +459,7 @@ export default function RequestDetailScreen() {
             </View>
           </View>
 
-          {/* SLA — ✅ usa currentRequest */}
+          {/* SLA */}
           <View style={styles.card}>
             <View style={styles.row}>
               <Icon name="clock" size={14} color="#000000" />
@@ -474,7 +499,6 @@ export default function RequestDetailScreen() {
             </View>
           </View>
 
-
           {/* ACCIONES */}
           {stateId !== 3 && stateId !== 4 && (
             <View style={styles.card}>
@@ -490,8 +514,14 @@ export default function RequestDetailScreen() {
                   onPress={primaryAction.onPress}
                   disabled={loading}
                 >
-                  <Icon name={primaryAction.icon} size={18} color={primaryAction.textColor} />
-                  <Text style={[styles.primaryText, { color: primaryAction.textColor }]}>
+                  <Icon
+                    name={primaryAction.icon}
+                    size={18}
+                    color={primaryAction.textColor}
+                  />
+                  <Text
+                    style={[styles.primaryText, { color: primaryAction.textColor }]}
+                  >
                     {primaryAction.label}
                   </Text>
                 </TouchableOpacity>
@@ -554,7 +584,10 @@ export default function RequestDetailScreen() {
                   <View style={styles.imageRow}>
                     {images.map((img, index) => (
                       <View key={index} style={styles.imageBox}>
-                        <Image source={{ uri: img.uri }} style={styles.previewImage} />
+                        <Image
+                          source={{ uri: img.uri }}
+                          style={styles.previewImage}
+                        />
                         <TouchableOpacity
                           style={styles.removeBtn}
                           onPress={() => removeImage(index)}
@@ -571,11 +604,15 @@ export default function RequestDetailScreen() {
                   <TouchableOpacity
                     style={styles.checkbox}
                     onPress={() =>
-                      setCommentType(commentType === "publico" ? "interno" : "publico")
+                      setCommentType(
+                        commentType === "publico" ? "interno" : "publico"
+                      )
                     }
                   >
                     <Icon
-                      name={commentType === "interno" ? "check-square" : "square"}
+                      name={
+                        commentType === "interno" ? "check-square" : "square"
+                      }
                       size={18}
                       color={commentType === "interno" ? "#2563eb" : "#64748b"}
                     />
@@ -588,7 +625,9 @@ export default function RequestDetailScreen() {
                       color="#64748b"
                     />
                     <Text style={styles.internalText}>
-                      {commentType === "interno" ? "Comentario interno" : "Comentario público"}
+                      {commentType === "interno"
+                        ? "Comentario interno"
+                        : "Comentario público"}
                     </Text>
                   </View>
 
@@ -596,7 +635,10 @@ export default function RequestDetailScreen() {
                     <TouchableOpacity style={styles.iconBtn} onPress={openCamera}>
                       <Icon name="camera" size={18} color="#64748b" />
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.iconBtn} onPress={openImagePicker}>
+                    <TouchableOpacity
+                      style={styles.iconBtn}
+                      onPress={openImagePicker}
+                    >
                       <Icon name="image" size={18} color="#64748b" />
                     </TouchableOpacity>
                   </View>
@@ -611,18 +653,19 @@ export default function RequestDetailScreen() {
 
           {/* SEND */}
           {stateId !== 3 && stateId !== 4 && (
-            <>
-              <TouchableOpacity
-                style={[styles.sendBtn, (loading || isBlocked) && { opacity: 0.6 }]}
-                onPress={handleSend}
-                disabled={loading || isBlocked}
-              >
-                <Icon name="send" size={16} color="#fff" />
-                <Text style={styles.btnText}>
-                  {loading ? "Enviando..." : "Enviar"}
-                </Text>
-              </TouchableOpacity>
-            </>
+            <TouchableOpacity
+              style={[
+                styles.sendBtn,
+                (loading || isBlocked) && { opacity: 0.6 },
+              ]}
+              onPress={handleSend}
+              disabled={loading || isBlocked}
+            >
+              <Icon name="send" size={16} color="#fff" />
+              <Text style={styles.btnText}>
+                {loading ? "Enviando..." : "Enviar"}
+              </Text>
+            </TouchableOpacity>
           )}
         </ScrollView>
 
@@ -631,7 +674,7 @@ export default function RequestDetailScreen() {
           visible={modalVisible}
           request={currentRequest}
           onClose={() => setModalVisible(false)}
-          onSubmit={async () => {  // ✅ sin parámetros
+          onSubmit={async () => {
             setModalVisible(false);
             await loadTicket();
             await loadComments();
@@ -667,7 +710,6 @@ export default function RequestDetailScreen() {
           setLoading={setLoading}
           setModalVisible={setModalVisibleAsignar}
         />
-
       </View>
     </KeyboardAvoidingView>
   );
@@ -709,25 +751,21 @@ function getPriorityColor(priority: string) {
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
-
   container: {
     flex: 1,
     backgroundColor: "#f5f6fa",
   },
-
   header: {
     backgroundColor: "#007aff",
     padding: 20,
     flexDirection: "row",
     justifyContent: "space-between",
   },
-
   headerTitle: {
     color: "#fff",
     fontSize: 18,
     fontWeight: "bold",
   },
-
   headerSubtitle: {
     color: "#fff",
     opacity: 0.8,
@@ -739,37 +777,29 @@ const styles = StyleSheet.create({
     gap: 6,
     marginTop: 30,
   },
-
   headerTwo: {
     flexDirection: "row",
     justifyContent: "space-between",
     padding: 16,
     backgroundColor: "#fff",
   },
-
   headerTitleTwo: { fontSize: 16, fontWeight: "600" },
-
   content: { padding: 12 },
-
   contentContainer: {
     padding: 16,
   },
-
   card: {
     backgroundColor: "#fff",
     padding: 14,
     borderRadius: 12,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#e2e8f0'
+    borderColor: "#e2e8f0",
   },
-
   title: { fontSize: 16, fontWeight: "600" },
   sub: { fontSize: 12, color: "#64748b", marginBottom: 10 },
-
   row: { flexDirection: "row", gap: 6, alignItems: "center", marginBottom: 10 },
   text: { fontSize: 12, color: "#000000" },
-
   input: {
     borderWidth: 1,
     borderColor: "#e2e8f0",
@@ -778,51 +808,41 @@ const styles = StyleSheet.create({
     minHeight: 80,
     marginBottom: 10,
   },
-
   footer: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-
   checkbox: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
-
   internalText: {
     fontSize: 12,
     color: "#64748b",
   },
-
   leftActions: { flexDirection: "row" },
-
   iconBtn: { padding: 6 },
-
   helperText: {
     marginTop: 8,
     fontSize: 11,
     color: "#64748b",
   },
-
   imageRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
     marginBottom: 10,
   },
-
   imageBox: {
     position: "relative",
   },
-
   previewImage: {
     width: 80,
     height: 80,
     borderRadius: 10,
   },
-
   removeBtn: {
     position: "absolute",
     top: 4,
@@ -831,7 +851,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 2,
   },
-
   sendBtn: {
     backgroundColor: "#3b82f6",
     padding: 12,
@@ -840,19 +859,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
   },
-
   btnText: { color: "#fff", fontWeight: "600" },
-
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   emptyText: { color: "#64748b" },
-
   tags: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 6,
     marginBottom: 10,
   },
-
   tag: {
     fontSize: 10,
     paddingHorizontal: 8,
@@ -860,7 +875,6 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     overflow: "hidden",
   },
-
   category: {
     fontSize: 10,
     color: "#64748b",
@@ -869,50 +883,41 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 6,
   },
-
   internalComment: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
   },
-
   label: {
-    color: "#64748b", // gris suave para el texto fijo
+    color: "#64748b",
   },
-
   value: {
-    color: "#0f172a", // más oscuro para el nombre
+    color: "#0f172a",
     fontWeight: "500",
   },
-
   valueGreen: {
-    color: "#10b880", // más oscuro para el nombre
+    color: "#10b880",
     fontWeight: "500",
   },
-
   valueOrange: {
-    color: "#f59d0b", // más oscuro para el nombre
+    color: "#f59d0b",
     fontWeight: "500",
   },
-
   rowSla: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginVertical: 4,
   },
-
   labelSla: {
     fontWeight: "600",
     color: "#000",
   },
-
   valueContainer: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4, // si no funciona, usa marginRight en el icon
+    gap: 4,
   },
-
   actionBtn: {
     backgroundColor: "#2563eb",
     paddingVertical: 12,
@@ -923,49 +928,42 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
   },
-
   btnTextAccion: {
     color: "#000000",
     fontWeight: "600",
   },
-
   commentBox: {
     marginBottom: 10,
     padding: 10,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: "#f1f5f9",
     borderRadius: 6,
   },
   commentUser: {
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 4,
   },
   commentText: {
-    color: '#334155',
+    color: "#334155",
   },
-
   commentItem: {
     padding: 10,
     borderBottomWidth: 1,
-    borderColor: '#eee',
+    borderColor: "#eee",
   },
-
   commentDate: {
     fontSize: 12,
-    color: 'gray',
+    color: "gray",
   },
-
   commentStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginTop: 6,
   },
-
   commentStatusText: {
     marginLeft: 3,
     fontSize: 10,
-    color: '#64748b',
+    color: "#64748b",
   },
-
   primaryButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -975,18 +973,15 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 10,
   },
-
   primaryText: {
     fontSize: 14,
     fontWeight: "600",
   },
-
   secondaryContainer: {
     flexDirection: "row",
     gap: 10,
     marginTop: 10,
   },
-
   secondaryButton: {
     flex: 1,
     flexDirection: "row",
@@ -998,16 +993,13 @@ const styles = StyleSheet.create({
     borderColor: "#e2e8f0",
     gap: 6,
   },
-
   dangerButton: {
     borderColor: "#fecaca",
   },
-
   secondaryText: {
     fontSize: 13,
     color: "#334155",
   },
-
   dangerText: {
     color: "#dc2626",
   },

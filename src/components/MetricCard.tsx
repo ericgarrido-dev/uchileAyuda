@@ -1,41 +1,65 @@
-import { LucideIcon } from "lucide-react";
-import { motion } from "motion/react";
+import React from "react";
+import { TouchableOpacity, View, Text, StyleSheet } from "react-native";
+import Icon from "react-native-vector-icons/Feather";
 
 interface MetricCardProps {
   label: string;
   value: number;
-  icon: LucideIcon;
+  iconName: string;
   color: string;
-  trend?: {
-    value: number;
-    isPositive: boolean;
-  };
+  active?: boolean;
+  onPress: () => void;
 }
 
-export function MetricCard({ label, value, icon: Icon, color, trend }: MetricCardProps) {
+export function MetricCard({ label, value, iconName, color, onPress, active }: MetricCardProps) {
   return (
-    <motion.div
-      whileHover={{ y: -2 }}
-      className="bg-card border border-border rounded-xl p-4"
+    <TouchableOpacity
+      style={[
+        styles.metricCard,
+        active && { borderWidth: 2, borderColor: color },
+      ]}
+      onPress={onPress}
+      activeOpacity={0.8}
     >
-      <div className="flex items-start justify-between mb-3">
-        <div className={`p-2.5 rounded-lg ${color}`}>
-          <Icon className="w-5 h-5 text-white" />
-        </div>
-        {trend && (
-          <span
-            className={`text-xs font-medium ${
-              trend.isPositive ? "text-green-600" : "text-red-600"
-            }`}
-          >
-            {trend.isPositive ? "+" : ""}{trend.value}%
-          </span>
-        )}
-      </div>
-      <div className="space-y-1">
-        <p className="text-2xl font-semibold text-foreground">{value}</p>
-        <p className="text-sm text-muted-foreground">{label}</p>
-      </div>
-    </motion.div>
+      <View style={[styles.iconBox, { backgroundColor: color }]}>
+        <Icon name={iconName} size={18} color="#fff" />
+      </View>
+      <Text style={styles.metricValue}>{value}</Text>
+      <Text style={styles.metricLabel}>{label}</Text>
+    </TouchableOpacity>
   );
 }
+
+const styles = StyleSheet.create({
+  metricCard: {
+    flex: 1,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 14,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  iconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  metricValue: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#1e293b",
+  },
+  metricLabel: {
+    fontSize: 12,
+    color: "#64748b",
+    marginTop: 2,
+  },
+});

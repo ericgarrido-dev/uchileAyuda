@@ -8,40 +8,39 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
-import Icon from "react-native-vector-icons/Feather";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import * as Animatable from "react-native-animatable";
 import { RequestCard } from "../components/RequestCard";
 import { useAuth } from "../context/AuthContext";
 import { Header } from "../components/Header";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
+import { MetricCard } from "../components/MetricCard";
 import api from "../services/api";
 
 /* ---------------- MAPA FILTRO → STATUS_ID ---------------- */
 const filterToStatusId: Record<string, number> = {
-  abiertas:    1,
-  proceso:     2,
-  finalizadas: 3,
-  vencidas:    4,
+  pendientes: 1,
+  proceso: 2,
+  cerradas: 3,
+  anuladas: 4,
 };
 
 export default function DashboardScreen() {
   const navigation = useNavigation<any>();
   const { logout } = useAuth();
 
-  const [showAll,      setShowAll]      = useState(false);
-  const [loading,      setLoading]      = useState(true);
-  const [tickets,      setTickets]      = useState<any[]>([]);
-  const [tenant,       setTenant]       = useState<string | null>(null);
-  const [tenants,      setTenants]      = useState<any[]>([]);   // ← lista completa de tenants
+  const [showAll, setShowAll] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [tickets, setTickets] = useState<any[]>([]);
+  const [tenant, setTenant] = useState<string | null>(null);
+  const [tenants, setTenants] = useState<any[]>([]);   // ← lista completa de tenants
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
 
   const [metrics, setMetrics] = useState({
-    openRequests:    0,
-    inProgress:      0,
-    closedRequests:  0,
+    openRequests: 0,
+    inProgress: 0,
+    closedRequests: 0,
     overdueRequests: 0,
   });
 
@@ -61,7 +60,7 @@ export default function DashboardScreen() {
     try {
       setLoading(true);
 
-      const token        = await AsyncStorage.getItem("token");
+      const token = await AsyncStorage.getItem("token");
       const tenantStored = await AsyncStorage.getItem("tenant_id");
 
       setTenant(tenantStored);
@@ -76,26 +75,22 @@ export default function DashboardScreen() {
         params.status_id = filterToStatusId[filter];
       }
 
-      const response = await axios.get(
-        "https://devticket.uchilefau.cl/api/tickets",
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "X-Tenant": tenantStored,
-            Accept: "application/json",
-          },
-          params,
-        }
-      );
+      const response = await api.get('/tickets', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "X-Tenant": tenantStored,
+        },
+        params,
+      });
 
-      const data   = response.data;
+      const data = response.data;
       const counts = data?.meta?.counts ?? {};
 
       setMetrics({
-        openRequests:    counts.bandeja_entrada ?? 0,
-        inProgress:      counts.en_proceso      ?? 0,
-        closedRequests:  counts.cerrados        ?? 0,
-        overdueRequests: counts.anulados        ?? 0,
+        openRequests: counts.bandeja_entrada ?? 0,
+        inProgress: counts.en_proceso ?? 0,
+        closedRequests: counts.cerrados ?? 0,
+        overdueRequests: counts.anulados ?? 0,
       });
 
       setTickets(data?.data ?? []);
@@ -126,7 +121,7 @@ export default function DashboardScreen() {
       // Canjear el login_ticket por el token del tenant elegido
       const response = await api.post('/mobile/auth/select-tenant', {
         login_ticket: loginTicket,
-        tenant_id:    tenantId,
+        tenant_id: tenantId,
       });
 
       const token =
@@ -139,7 +134,7 @@ export default function DashboardScreen() {
       }
 
       // Guardar nuevo token + tenant activo
-      await AsyncStorage.setItem("token",     token);
+      await AsyncStorage.setItem("token", token);
       await AsyncStorage.setItem("tenant_id", tenantId);
 
       // Resetear filtros y recargar con el nuevo tenant
@@ -172,10 +167,10 @@ export default function DashboardScreen() {
 
   /* ---------------- FORMAT DATE ---------------- */
   const formatDate = (dateString: string) => {
-    const date  = new Date(dateString);
-    const day   = String(date.getDate()).padStart(2, "0");
+    const date = new Date(dateString);
+    const day = String(date.getDate()).padStart(2, "0");
     const month = String(date.getMonth() + 1).padStart(2, "0");
-    const year  = date.getFullYear();
+    const year = date.getFullYear();
     return `${day}-${month}-${year}`;
   };
 
@@ -222,8 +217,8 @@ export default function DashboardScreen() {
               value={metrics.openRequests}
               iconName="file-text"
               color="#3b82f6"
-              active={activeFilter === "abiertas"}
-              onPress={() => handleFilterPress("abiertas")}
+              active={activeFilter === "pendientes"}
+              onPress={() => handleFilterPress("pendientes")}
             />
             <MetricCard
               label="Proceso"
@@ -240,16 +235,16 @@ export default function DashboardScreen() {
               value={metrics.overdueRequests}
               iconName="alert-circle"
               color="#dc2626"
-              active={activeFilter === "vencidas"}
-              onPress={() => handleFilterPress("vencidas")}
+              active={activeFilter === "anuladas"}
+              onPress={() => handleFilterPress("anuladas")}
             />
             <MetricCard
               label="Cerradas"
               value={metrics.closedRequests}
               iconName="check-circle"
               color="#10b981"
-              active={activeFilter === "finalizadas"}
-              onPress={() => handleFilterPress("finalizadas")}
+              active={activeFilter === "cerradas"}
+              onPress={() => handleFilterPress("cerradas")}
             />
           </View>
         </View>
@@ -304,26 +299,6 @@ export default function DashboardScreen() {
   );
 }
 
-/* ---------------- METRIC CARD ---------------- */
-function MetricCard({ label, value, iconName, color, onPress, active }: any) {
-  return (
-    <TouchableOpacity
-      style={[
-        styles.metricCard,
-        active && { borderWidth: 2, borderColor: color },
-      ]}
-      onPress={onPress}
-      activeOpacity={0.8}
-    >
-      <View style={[styles.iconBox, { backgroundColor: color }]}>
-        <Icon name={iconName} size={18} color="#fff" />
-      </View>
-      <Text style={styles.metricValue}>{value}</Text>
-      <Text style={styles.metricLabel}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
-
 /* ---------------- STYLES ---------------- */
 const styles = StyleSheet.create({
   container: {
@@ -358,7 +333,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     shadowColor: "#000",
     shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowRadius: 10,
     elevation: 2,
     borderWidth: 2,
     borderColor: "transparent",

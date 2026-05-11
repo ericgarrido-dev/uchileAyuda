@@ -10,6 +10,7 @@ import {
 import Icon from "react-native-vector-icons/Feather";
 import * as Animatable from "react-native-animatable";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import messaging from "@react-native-firebase/messaging";
 import api from "../services/api";
 
 interface Tenant {
@@ -66,6 +67,26 @@ export default function TenantSelectionScreen({
       //    (mismo lugar donde los lee DashboardScreen)
       await AsyncStorage.setItem("token", token);
       await AsyncStorage.setItem("tenant_id", selected);
+
+      // 👇 Guardar FCM token aquí, cuando el JWT ya está en AsyncStorage
+      try {
+        const fcmToken = await messaging().getToken();
+        console.log("✅ tenant ", selected);
+        console.log("✅ FCM token ", fcmToken);
+
+        await api.post('/mobile/fcm-token', {
+          token: fcmToken,
+          platform: 'android',
+          tenant_id: selected,
+        }, {
+          headers: {
+            Authorization: `Bearer ${token}`, // 👈 token que acabas de recibir, no desde AsyncStorage
+          },
+        });
+        console.log("✅ FCM token guardado correctamente");
+      } catch (fcmError) {
+        console.log("❌ Error guardando FCM token:", fcmError);
+      }
 
       // 3. Navegar al dashboard
       onSelectTenant(selected);

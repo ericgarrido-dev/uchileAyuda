@@ -10,17 +10,14 @@ import {
 } from "react-native";
 
 import { LineChart, BarChart, PieChart } from "react-native-chart-kit";
-import * as Animatable from "react-native-animatable";
-import { useNavigation } from "@react-navigation/native";
 import { Header } from "../components/Header";
 import { useAuth } from "../context/AuthContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
+import api from "../services/api";
 
 const screenWidth = Dimensions.get("window").width;
 
 export default function StatsScreen() {
-  const navigation = useNavigation<any>();
   const { logout } = useAuth();
 
   const [tenant, setTenant] = useState<string | null>(null);
@@ -31,8 +28,6 @@ export default function StatsScreen() {
   const [responseTimeData, setResponseTimeData] = useState<any>(null);
   const [slaComplianceData, setSlaComplianceData] = useState<any>(null);
   const [categoryData, setCategoryData] = useState<any[]>([]);
-
-  const API = "https://devticket.uchilefau.cl/api";
 
   const chartConfig = {
     backgroundGradientFrom: "#fff",
@@ -61,16 +56,12 @@ export default function StatsScreen() {
         return;
       }
 
-      const response = await axios.get(
-        `${API}/tickets/estadisticas`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "X-Tenant": tenantStored,
-            Accept: "application/json",
-          },
-        }
-      );
+      const response = await api.get('/tickets/estadisticas', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "X-Tenant": tenantStored,
+        },
+      });
 
       const data = response.data?.data;
 
@@ -140,7 +131,7 @@ export default function StatsScreen() {
 
         {/* LOADING */}
         {loading ? (
-           <ActivityIndicator size="large" color="#007aff" style={{ marginTop: 20 }} />
+          <ActivityIndicator size="large" color="#007aff" style={{ marginTop: 20 }} />
         ) : (
           <>
             {/* LINE CHART */}

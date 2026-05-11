@@ -1,4 +1,3 @@
-import axios from 'axios'; // Asegúrate de importar axios
 import React, { useState, useEffect } from "react";
 import {
   Modal,
@@ -10,6 +9,7 @@ import {
   Alert,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import api from "../services/api";
 
 type Props = {
   visible: boolean;
@@ -46,55 +46,40 @@ export default function ModalAnularScreen({
   }, []); // Solo se ejecuta al montar el componente
 
   const handleSubmit = async () => {
-    // Comprobamos si la solicitud tiene un ID antes de enviar
     if (!request?.id) {
       Alert.alert("No se pudo obtener el ID de la solicitud.");
       return;
     }
 
-    // Datos a enviar en el request
-    const payload = {
-      request_id: request?.id,
-    };
-
-    console.log("Anular ticket:", payload);
-
     try {
-      setLoading(true); // Activar el estado de carga
+      setLoading(true);
 
-      // Usamos axios para hacer la solicitud POST
-      const response = await axios.post(
-        `https://devticket.uchilefau.cl/api/tickets/${request?.id}/anular`,
-        payload,
+      const response = await api.post(
+        `/tickets/${request.id}/anular`,
+        { request_id: request.id },
         {
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`, // Asegúrate de tener el token
-          }
+          headers: { Authorization: `Bearer ${token}` },
         }
       );
 
-      const data = response.data; // Obtener la respuesta de la API
-
+      const data = response.data;
       console.log("RESPUESTA DE ANULACIÓN:", data);
 
       if (data.success) {
-        onSubmit?.(payload); // Si la anulación es exitosa, llamar a onSubmit
-
-        setModalVisible(false); // Cerrar el modal de anulación
-        onClose(); // Llamar a onClose para cerrar el modal
-
+        onSubmit?.({ request_id: request.id });
+        setModalVisible(false);
+        onClose();
         Alert.alert("Ticket anulado exitosamente.");
       } else {
-        console.error("Error al anular el ticket", data.message);
         Alert.alert("Error", "No se pudo anular el ticket. Intente nuevamente.");
       }
-    } catch (error) {
+
+    } catch (error: any) {
+      const msg = error?.response?.data?.message;
+      Alert.alert("Error", msg || "Hubo un error al intentar anular el ticket.");
       console.error("Error al anular el ticket:", error);
-      Alert.alert("Error", "Hubo un error al intentar anular el ticket.");
     } finally {
-      setLoading(false); // Desactivar el estado de carga
+      setLoading(false);
     }
   };
 

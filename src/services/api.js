@@ -1,31 +1,34 @@
 import axios from 'axios';
 
-// Configuración básica de Axios con el nuevo baseURL
+//Detecta automáticamente el entorno
+const BASE_URL = __DEV__
+  ? 'https://devticket.uchilefau.cl/api'   // desarrollo
+  : 'https://ayuda.uchilefau.cl/api';     // producción
+
+console.log('🌐 Entorno:', __DEV__ ? 'DESARROLLO' : 'PRODUCCIÓN');
+console.log('🌐 API URL:', BASE_URL);
+
 const api = axios.create({
-    baseURL: 'https://devticket.uchilefau.cl/api',  // URL base común para todas las peticiones
-    headers: {
-        'Content-Type': 'application/json',
-    },
+  baseURL: BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
-// Manejo de errores globales
 api.interceptors.response.use(
-    (response) => response,
-    (error) => {
-        if (error.response) {
-            // El servidor respondió con un error
-            console.error('API Error:', error.response.data);
-            return Promise.reject(error.response.data);
-        } else if (error.request) {
-            // No se recibió respuesta del servidor
-            console.error('No Response:', error.request);
-            return Promise.reject({ message: 'Error de red' });
-        } else {
-            // Otro tipo de error
-            console.error('Error:', error.message);
-            return Promise.reject(error.message);
-        }
+  (response) => response,
+  (error) => {
+    if (error.response) {
+      console.error('API Error:', error.response.data);
+      return Promise.reject(error.response.data);
+    } else if (error.request) {
+      console.error('No Response:', error.request);
+      return Promise.reject({ message: 'Error de red' });
+    } else {
+      console.error('Error:', error.message);
+      return Promise.reject(error.message);
     }
+  }
 );
 
 export default api;

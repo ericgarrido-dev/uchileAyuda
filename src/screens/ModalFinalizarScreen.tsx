@@ -8,12 +8,13 @@ import {
     ScrollView,
     Image,
     StyleSheet,
-    Alert,  // Importar Alert de React Native
+    Alert,
 } from "react-native";
 import Icon from "react-native-vector-icons/Feather";
 import {
     launchCamera,
     launchImageLibrary,
+    Asset,
 } from "react-native-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Dropdown } from "react-native-element-dropdown";
@@ -24,8 +25,8 @@ type Props = {
     onClose: () => void;
     request: any;
     onSubmit?: () => Promise<void>;
-    setLoading: (loading: boolean) => void;  // Esta es la propiedad para setLoading
-    setModalVisible: (visible: boolean) => void;  // Esta es la propiedad para setModalVisible
+    setLoading: (loading: boolean) => void;
+    setModalVisible: (visible: boolean) => void;
 };
 
 export default function ModalFinalizarScreen({
@@ -33,13 +34,14 @@ export default function ModalFinalizarScreen({
     onClose,
     request,
     onSubmit,
-    setLoading,  // Aceptamos esta prop
-    setModalVisible,  // Aceptamos esta prop
+    setLoading,
+    setModalVisible,
 }: Props) {
+
     const [comment, setComment] = useState("");
     const [reason, setReason] = useState<string | null>(null);
-    const [images, setImages] = useState<any[]>([]);
-    const [tipoRespuesta, setTipoRespuesta] = useState(null);
+    const [images, setImages] = useState<Asset[]>([]);
+    const [tipoRespuesta, setTipoRespuesta] = useState<string | null>(null);
 
     const [tenant, setTenant] = useState<string | null>(null);
     const [token, setToken] = useState<string | null>(null);
@@ -82,19 +84,14 @@ export default function ModalFinalizarScreen({
         }
     }, [visible]);
 
-    interface Comment {
-        id: number;
-        name: string;
-    }
-
     const cargarEstadosCierre = async () => {
         setLoadingEstados(true);
 
         const data = await getEstadoCierre();
 
-        const ordenados = data.sort((a: Comment, b: Comment) => a.id - b.id);
+        const ordenados = data.sort((a: any, b: any) => a.id - b.id);
 
-        const formatted = ordenados.map((item: Comment) => ({
+        const formatted = ordenados.map((item: any) => ({
             label: item.name,
             value: String(item.id),
         }));
@@ -110,10 +107,8 @@ export default function ModalFinalizarScreen({
             (res) => {
                 if (res.didCancel || res.errorCode) return;
 
-                // Verificamos que 'res.assets' sea un array antes de intentar usarlo
-                if (res.assets && Array.isArray(res.assets)) {
-                    setImages((prev) => [...prev, ...res.assets]);
-                }
+                const assets = res.assets ?? [];
+                setImages((prev) => [...prev, ...assets]);
             }
         );
     };
@@ -123,7 +118,9 @@ export default function ModalFinalizarScreen({
             { mediaType: "photo", selectionLimit: 0, quality: 0.7 },
             (res) => {
                 if (res.didCancel || res.errorCode) return;
-                if (res.assets) setImages((prev) => [...prev, ...res.assets]);
+
+                const assets = res.assets ?? [];
+                setImages((prev) => [...prev, ...assets]);
             }
         );
     };
@@ -131,173 +128,127 @@ export default function ModalFinalizarScreen({
     /* ---------------- SUBMIT ---------------- */
     const handleSubmit = async () => {
         if (submitting) return;
-        // Verifica que `tipoRespuesta` tenga un valor válido
+
         if (!comment) {
             Alert.alert("Por favor, ingrese comentario.");
             return;
-
         }
+
         if (!tipoRespuesta) {
             Alert.alert("Por favor, seleccione un estado de cierre.");
             return;
         }
 
-        const payload = {
-            comment,         // Comentario ingresado por el usuario
-            estadoCierreId: tipoRespuesta,  // Aquí asignamos `estado_cierre_id` con el `value` del Dropdown
-            images,          // Archivos de imágenes adjuntos
-        };
-
-        console.log("Finalizar ticket:", payload);  // Solo para verificar
-
         try {
             setSubmitting(true);
-            setLoading(true);  // Activar el estado de carga mientras se procesa
+            setLoading(true);
 
             const formData = new FormData();
+            formData.append("estado_cierre_id", tipoRespuesta);
+            formData.append("comentario", comment);
 
-            // Agregar el estado de cierre (ID) que seleccionó el usuario
-            formData.append("estado_cierre_id", payload.estadoCierreId);  // Esto es lo que espera la API
-
-            // Agregar comentario al FormData
-            formData.append("comentario", payload.comment);
-
-            // Agregar las imágenes al FormData
-            payload.images.forEach((img, index) => {
+            images.forEach((img, index) => {
                 formData.append("files[]", {
                     uri: img.uri,
-                    type: img.type || "image/jpeg",  // Asegúrate de que sea el tipo correcto
-                    name: img.fileName || `image_${index}.jpg`,  // Nombre del archivo
-                });
+                    type: img.type || "image/jpeg",
+                    name: img.fileName || `image_${index}.jpg`,
+                } as any);
             });
 
-            const ticketId = request.id;  // El ID del ticket que viene de `request`
-
-            // Realizar la solicitud POST para finalizar el ticket
-            const response = await fetch(
-                `https://devticket.uchilefau.cl/api/tickets/${ticketId}/finalizar`,
+            const response = await api.post(
+                `/tickets/${request.id}/finalizar`,
+                formData,
                 {
-                    method: "POST",
                     headers: {
-                        Accept: "application/json",
+                        Authorization: `Bearer ${token}`,
                         "Content-Type": "multipart/form-data",
-                        Authorization: `Bearer ${token}`,  // Añadir el token de autenticación
                     },
-                    body: formData,  // Enviar los datos como FormData
                 }
             );
 
-            const data = await response.json();  // Obtener la respuesta de la API
-
-            console.log("RESPUESTA DE FINALIZACIÓN:", data);
+            const data = response.data;
 
             if (data.success) {
-                // Limpiar formulario
                 setComment("");
                 setTipoRespuesta(null);
                 setImages([]);
-
-                // Cerrar modal
                 setModalVisible(false);
                 onClose();
-
-                // ✅ Una sola llamada, sin argumentos
                 await onSubmit?.();
             } else {
-                console.error("Error al finalizar el ticket", data.message);
-                Alert.alert("No se pudo finalizar el ticket, por favor intente nuevamente.");
+                Alert.alert("No se pudo finalizar el ticket.");
             }
 
-        } catch (error) {
-            console.error("Error al finalizar el ticket:", error);
-            Alert.alert("Hubo un error al intentar finalizar el ticket.");
+        } catch (error: any) {
+            const msg = error?.response?.data?.message;
+            Alert.alert(msg || "Error al finalizar ticket.");
         } finally {
             setSubmitting(false);
-            setLoading(false);  // Desactivar el estado de carga
+            setLoading(false);
         }
     };
 
     return (
-        <Modal
-            visible={visible}
-            transparent
-            animationType="fade"
-            onRequestClose={onClose}
-        >
+        <Modal visible={visible} transparent animationType="fade">
             <View style={styles.overlay}>
                 <View style={styles.container}>
-                    <ScrollView
-                        showsVerticalScrollIndicator={false}
-                        contentContainerStyle={{ paddingBottom: 20 }}
-                    >
-                        <Text style={styles.title}>Finalizar Ticket</Text>
 
-                        {/* DROPDOWN DINÁMICO */}
-                        <Dropdown
-                            style={styles.dropdown}
-                            placeholderStyle={styles.placeholder}
-                            selectedTextStyle={styles.selectedText}
-                            data={estadosCierre}
-                            labelField="label"
-                            valueField="value"
-                            placeholder={loadingEstados ? "Cargando..." : "Seleccione…"}
-                            value={tipoRespuesta}
-                            onChange={(item) => {
-                                console.log("Estado seleccionado:", item.value);  // Verifica el valor aquí
-                                setTipoRespuesta(item.value);
-                            }}
-                            itemTextStyle={styles.itemTextStyle}
-                        />
+                    <Text style={styles.title}>Finalizar Ticket</Text>
 
-                        {/* COMMENT */}
-                        <TextInput
-                            placeholder="Comentario..."
-                            value={comment}
-                            onChangeText={setComment}
-                            multiline
-                            style={styles.input}
-                        />
+                    <Dropdown
+                        style={styles.dropdown}
+                        data={estadosCierre}
+                        labelField="label"
+                        valueField="value"
+                        placeholder={loadingEstados ? "Cargando..." : "Seleccione..."}
+                        value={tipoRespuesta}
+                        onChange={(item) => setTipoRespuesta(item.value)}
+                    />
 
-                        {/* ACTIONS */}
-                        <View style={styles.actions}>
-                            <TouchableOpacity onPress={openCamera}>
-                                <Icon name="camera" size={22} color="#64748b" />
-                            </TouchableOpacity>
+                    <TextInput
+                        placeholder="Comentario..."
+                        value={comment}
+                        onChangeText={setComment}
+                        multiline
+                        style={styles.input}
+                    />
 
-                            <TouchableOpacity onPress={openGallery}>
-                                <Icon name="image" size={22} color="#64748b" />
-                            </TouchableOpacity>
-                        </View>
-
-                        {/* IMAGES */}
-                        <ScrollView horizontal style={{ marginVertical: 10 }}>
-                            {images.map((img, index) => (
-                                <Image
-                                    key={index}
-                                    source={{ uri: img.uri }}
-                                    style={styles.preview}
-                                />
-                            ))}
-                        </ScrollView>
-                    </ScrollView>
-
-                    {/* FOOTER */}
-                    <View style={styles.footer}>
-                        <TouchableOpacity onPress={onClose}>
-                            <Text style={{ color: "#64748b" }}>Cancelar</Text>
+                    <View style={styles.actions}>
+                        <TouchableOpacity onPress={openCamera}>
+                            <Icon name="camera" size={22} color="#64748b" />
                         </TouchableOpacity>
 
-                        {/* ✅ disabled mientras loading, opacity para feedback visual */}
+                        <TouchableOpacity onPress={openGallery}>
+                            <Icon name="image" size={22} color="#64748b" />
+                        </TouchableOpacity>
+                    </View>
+
+                    <ScrollView horizontal>
+                        {images.map((img, index) => (
+                            <Image
+                                key={index}
+                                source={{ uri: img.uri }}
+                                style={styles.preview}
+                            />
+                        ))}
+                    </ScrollView>
+
+                    <View style={styles.footer}>
+                        <TouchableOpacity onPress={onClose}>
+                            <Text>Cancelar</Text>
+                        </TouchableOpacity>
+
                         <TouchableOpacity
                             onPress={handleSubmit}
                             disabled={submitting}
                             style={{ opacity: submitting ? 0.5 : 1 }}
                         >
-                            <Text style={{ color: "#008236", fontWeight: "bold" }}>
+                            <Text style={{ fontWeight: "bold", color: "#008236" }}>
                                 {submitting ? "Finalizando..." : "Finalizar"}
                             </Text>
                         </TouchableOpacity>
                     </View>
+
                 </View>
             </View>
         </Modal>
@@ -317,12 +268,10 @@ const styles = StyleSheet.create({
         padding: 20,
         borderRadius: 20,
         width: "90%",
-        maxHeight: "80%",
     },
     title: {
         fontSize: 18,
         fontWeight: "bold",
-        marginBottom: 10,
     },
     input: {
         borderWidth: 1,
@@ -331,7 +280,6 @@ const styles = StyleSheet.create({
         padding: 10,
         marginTop: 10,
         minHeight: 80,
-        textAlignVertical: "top",
     },
     actions: {
         flexDirection: "row",
@@ -351,20 +299,10 @@ const styles = StyleSheet.create({
     },
     dropdown: {
         height: 40,
-        borderColor: "#e5e7eb",
         borderWidth: 1,
+        borderColor: "#e5e7eb",
         borderRadius: 8,
-        paddingHorizontal: 10,
         marginTop: 10,
-    },
-    placeholder: {
-        color: "#9ca3af",
-        fontSize: 12,
-    },
-    selectedText: {
-        color: "#111827",
-    },
-    itemTextStyle: {
-        fontSize: 12,
+        paddingHorizontal: 10,
     },
 });
