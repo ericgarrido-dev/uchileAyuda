@@ -1,19 +1,25 @@
 image: reactnativecommunity/react-native-android:latest
 
+options:
+  size: 2x
+
 pipelines:
   branches:
     main:
       - step:
           name: Build APK y enviar por correo
+          size: 2x
           caches:
             - node
             - gradle
+
           script:
             - npm install
-            - cd android && chmod +x gradlew
-            - ./gradlew assembleRelease
+            - cd android
+            - chmod +x gradlew
+            - ./gradlew assembleRelease --no-daemon
 
-            - APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
+            - APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
             - APK_BASE64=$(base64 -w 0 $APK_PATH)
             - APK_NAME=$(basename $APK_PATH)
 
@@ -33,7 +39,7 @@ pipelines:
               --boundary
               Content-Type: text/plain
 
-              Se generó un nuevo APK de UchileAyuda. Ver archivo adjunto.
+              Se generó un nuevo APK de UchileAyuda.
 
               --boundary
               Content-Type: application/vnd.android.package-archive
