@@ -4,7 +4,7 @@ pipelines:
   branches:
     main:
       - step:
-          name: Build APK
+          name: Build APK y enviar por correo
           caches:
             - node
             - gradle
@@ -12,5 +12,37 @@ pipelines:
             - npm install
             - cd android && chmod +x gradlew
             - ./gradlew assembleRelease
+
+            - APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
+            - APK_BASE64=$(base64 -w 0 $APK_PATH)
+            - APK_NAME=$(basename $APK_PATH)
+
+            - |
+              curl --ssl-reqd \
+                --url "smtps://smtp.gmail.com:465" \
+                --user "$GMAIL_USER:$GMAIL_APP_PASSWORD" \
+                --mail-from "$GMAIL_USER" \
+                --mail-rcpt "eric.garrido@uchile.cl" \
+                --upload-file - <<EOF
+              From: $GMAIL_USER
+              To: eric.garrido@uchile.cl
+              Subject: UchileAyuda - Nuevo APK generado
+              MIME-Version: 1.0
+              Content-Type: multipart/mixed; boundary="boundary"
+
+              --boundary
+              Content-Type: text/plain
+
+              Se generó un nuevo APK de UchileAyuda. Ver archivo adjunto.
+
+              --boundary
+              Content-Type: application/vnd.android.package-archive
+              Content-Transfer-Encoding: base64
+              Content-Disposition: attachment; filename="$APK_NAME"
+
+              $APK_BASE64
+              --boundary--
+              EOF
+
           artifacts:
             - android/app/build/outputs/apk/release/*.apk
