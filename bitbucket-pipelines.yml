@@ -1,0 +1,16 @@
+image: reactnativecommunity/react-native-android:latest
+
+pipelines:
+  branches:
+    principal:
+      - step:
+          name: Build APK
+          caches:
+            - node
+            - gradle
+          script:
+            - npm install
+            - cd android && chmod +x gradlew
+            - ./gradlew assembleRelease
+          artifacts:
+            - android/app/build/outputs/apk/release/*.apk
