@@ -3,7 +3,7 @@ import axios from 'axios';
 //Detecta automáticamente el entorno
 const BASE_URL = __DEV__
   ? 'https://devticket.uchilefau.cl/api'   // desarrollo
-  : 'https://ayuda.uchilefau.cl/api';     // producción
+  : 'https://ayuda.uchilefau.cl/api';     // producciónd
 
 console.log('Entorno:', __DEV__ ? 'DESARROLLO' : 'PRODUCCIÓN');
 console.log('API URL:', BASE_URL);

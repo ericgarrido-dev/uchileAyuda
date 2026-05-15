@@ -2,7 +2,7 @@ image: reactnativecommunity/react-native-android:latest
 
 pipelines:
   branches:
-    principal:
+    main:
       - step:
           name: Build APK
           caches:
