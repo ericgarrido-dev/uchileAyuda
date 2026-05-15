@@ -5,8 +5,8 @@ const BASE_URL = __DEV__
   ? 'https://devticket.uchilefau.cl/api'   // desarrollo
   : 'https://ayuda.uchilefau.cl/api';     // producción
 
-console.log('🌐 Entorno:', __DEV__ ? 'DESARROLLO' : 'PRODUCCIÓN');
-console.log('🌐 API URL:', BASE_URL);
+console.log('Entorno:', __DEV__ ? 'DESARROLLO' : 'PRODUCCIÓN');
+console.log('API URL:', BASE_URL);
 
 const api = axios.create({
   baseURL: BASE_URL,
