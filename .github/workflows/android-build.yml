@@ -41,23 +41,48 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
 
-      - name: Verificar APK
-        run: |
-          find android/app/build/outputs -name "*.apk"
-
       - name: Guardar APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-release
           path: android/app/build/outputs/apk/release/*.apk
 
-      - name: Probar envio correo
+      - name: Enviar correo con APK
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
         run: |
-          echo "Prueba GitHub Actions correo SMTP funcionando" > mensaje.txt
+          APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
+          APK_NAME=$(basename $APK_PATH)
 
-          curl --ssl-reqd \
-            --url "smtps://smtp.gmail.com:465" \
-            --user "${{ secrets.GMAIL_USER }}:${{ secrets.GMAIL_APP_PASSWORD }}" \
-            --mail-from "${{ secrets.GMAIL_USER }}" \
-            --mail-rcpt "eric.garrido@uchile.cl" \
-            --upload-file mensaje.txt
+          python3 - <<PYEOF
+          import smtplib, os, base64
+          from email.mime.multipart import MIMEMultipart
+          from email.mime.text import MIMEText
+          from email.mime.base import MIMEBase
+          from email import encoders
+
+          gmail_user = os.environ["GMAIL_USER"]
+          gmail_pass = os.environ["GMAIL_APP_PASSWORD"]
+          apk_path   = "$APK_PATH"
+          apk_name   = "$APK_NAME"
+
+          msg = MIMEMultipart()
+          msg["From"]    = gmail_user
+          msg["To"]      = "eric.garrido@uchile.cl"
+          msg["Subject"] = "UchileAyuda - Nuevo APK generado"
+
+          msg.attach(MIMEText("Se generó un nuevo APK de UchileAyuda.", "plain"))
+
+          with open(apk_path, "rb") as f:
+              part = MIMEBase("application", "vnd.android.package-archive")
+              part.set_payload(f.read())
+              encoders.encode_base64(part)
+              part.add_header("Content-Disposition", f'attachment; filename="{apk_name}"')
+              msg.attach(part)
+
+          with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+              server.login(gmail_user, gmail_pass)
+              server.sendmail(gmail_user, "eric.garrido@uchile.cl", msg.as_string())
+              print("Correo enviado correctamente")
+          PYEOF
