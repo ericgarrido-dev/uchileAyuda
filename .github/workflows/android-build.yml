@@ -1,0 +1,80 @@
+name: Build APK y enviar correo
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: Instalar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*') }}
+
+      - name: Instalar dependencias
+        run: npm install
+
+      - name: Build APK Release
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Guardar APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: android/app/build/outputs/apk/release/*.apk
+
+      - name: Enviar correo con APK
+        run: |
+          APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
+          APK_BASE64=$(base64 -w 0 $APK_PATH)
+          APK_NAME=$(basename $APK_PATH)
+
+          curl --ssl-reqd \
+            --url "smtps://smtp.gmail.com:465" \
+            --user "${{ secrets.GMAIL_USER }}:${{ secrets.GMAIL_APP_PASSWORD }}" \
+            --mail-from "${{ secrets.GMAIL_USER }}" \
+            --mail-rcpt "eric.garrido@uchile.cl" \
+            --upload-file - <<EOF
+          From: ${{ secrets.GMAIL_USER }}
+          To: eric.garrido@uchile.cl
+          Subject: UchileAyuda - Nuevo APK generado
+          MIME-Version: 1.0
+          Content-Type: multipart/mixed; boundary="boundary"
+
+          --boundary
+          Content-Type: text/plain
+
+          Se generó un nuevo APK de UchileAyuda.
+
+          --boundary
+          Content-Type: application/vnd.android.package-archive
+          Content-Transfer-Encoding: base64
+          Content-Disposition: attachment; filename="$APK_NAME"
+
+          $APK_BASE64
+          --boundary--
+          EOF
