@@ -47,6 +47,16 @@ jobs:
           name: app-release
           path: android/app/build/outputs/apk/release/*.apk
 
+      - name: Debug secrets
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: |
+          echo "USER longitud: ${#GMAIL_USER}"
+          echo "PASS longitud: ${#GMAIL_APP_PASSWORD}"
+          echo "USER primeros 3 chars: ${GMAIL_USER:0:3}"
+          echo "PASS primeros 3 chars: ${GMAIL_APP_PASSWORD:0:3}"
+
       - name: Enviar correo con APK
         env:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
