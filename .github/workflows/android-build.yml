@@ -1,15 +1,47 @@
-- name: Build APK
-  run: |
-    cd android
-    chmod +x gradlew
-    ./gradlew assembleRelease --stacktrace
+name: Build APK
 
-- name: Verificar APK
-  run: |
-    find android/app/build/outputs -name "*.apk"
+on:
+  push:
+    branches:
+      - main
 
-- name: Upload APK
-  uses: actions/upload-artifact@v4
-  with:
-    name: app-release
-    path: android/app/build/outputs/apk/release/*.apk
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      CI: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Instalar dependencias
+        run: npm install
+
+      - name: Build APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --stacktrace
+
+      - name: Verificar APK
+        run: |
+          find android/app/build/outputs -name "*.apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: android/app/build/outputs/apk/release/*.apk
