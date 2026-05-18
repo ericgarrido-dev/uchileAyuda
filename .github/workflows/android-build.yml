@@ -31,3 +31,4 @@ jobs:
             --mail-from "${GMAIL_USER}" \
             --mail-rcpt "eric.garrido@uchile.cl" \
             --upload-file /tmp/mail.txt
+            
