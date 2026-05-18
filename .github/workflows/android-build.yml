@@ -1,4 +1,4 @@
-name: Build APK y enviar correo
+name: Test correo
 
 on:
   push:
@@ -6,93 +6,28 @@ on:
       - main
 
 jobs:
-  build:
+  test-correo:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Clonar repositorio
-        uses: actions/checkout@v4
-
-      - name: Instalar Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Instalar Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*') }}
-
-      - name: Instalar dependencias
-        run: npm install
-
-      - name: Build APK Release
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
-
-      - name: Guardar APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-release
-          path: android/app/build/outputs/apk/release/*.apk
-
-      - name: Debug secrets
+      - name: Enviar correo de prueba
         env:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
         run: |
-          echo "USER longitud: ${#GMAIL_USER}"
-          echo "PASS longitud: ${#GMAIL_APP_PASSWORD}"
-          echo "USER primeros 3 chars: ${GMAIL_USER:0:3}"
-          echo "PASS primeros 3 chars: ${GMAIL_APP_PASSWORD:0:3}"
+          cat > /tmp/mail.txt << MAILEOF
+          From: ${GMAIL_USER}
+          To: eric.garrido@uchile.cl
+          Subject: Probando envio desde GitHub Actions
+          MIME-Version: 1.0
+          Content-Type: text/plain
 
-      - name: Enviar correo con APK
-        env:
-          GMAIL_USER: ${{ secrets.GMAIL_USER }}
-          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-        run: |
-          APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
-          APK_NAME=$(basename $APK_PATH)
+          Probando.
+          MAILEOF
 
-          python3 - <<PYEOF
-          import smtplib, os, base64
-          from email.mime.multipart import MIMEMultipart
-          from email.mime.text import MIMEText
-          from email.mime.base import MIMEBase
-          from email import encoders
-
-          gmail_user = os.environ["GMAIL_USER"]
-          gmail_pass = os.environ["GMAIL_APP_PASSWORD"]
-          apk_path   = "$APK_PATH"
-          apk_name   = "$APK_NAME"
-
-          msg = MIMEMultipart()
-          msg["From"]    = gmail_user
-          msg["To"]      = "eric.garrido@uchile.cl"
-          msg["Subject"] = "UchileAyuda - Nuevo APK generado"
-
-          msg.attach(MIMEText("Se generó un nuevo APK de UchileAyuda.", "plain"))
-
-          with open(apk_path, "rb") as f:
-              part = MIMEBase("application", "vnd.android.package-archive")
-              part.set_payload(f.read())
-              encoders.encode_base64(part)
-              part.add_header("Content-Disposition", f'attachment; filename="{apk_name}"')
-              msg.attach(part)
-
-          with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-              server.login(gmail_user, gmail_pass)
-              server.sendmail(gmail_user, "eric.garrido@uchile.cl", msg.as_string())
-              print("Correo enviado correctamente")
-          PYEOF
+          curl --ssl-reqd \
+            --url "smtps://smtp.gmail.com:465" \
+            --user "${GMAIL_USER}:${GMAIL_APP_PASSWORD}" \
+            --mail-from "${GMAIL_USER}" \
+            --mail-rcpt "eric.garrido@uchile.cl" \
+            --upload-file /tmp/mail.txt
