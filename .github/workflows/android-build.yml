@@ -47,34 +47,28 @@ jobs:
           name: app-release
           path: android/app/build/outputs/apk/release/*.apk
 
-      - name: Enviar correo con APK
+      - name: Enviar correo con link APK
         env:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
         run: |
-          APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
-          APK_NAME=$(basename $APK_PATH)
-          APK_BASE64=$(base64 -w 0 "$APK_PATH")
+          REPO="${{ github.repository }}"
+          RUN_ID="${{ github.run_id }}"
+          LINK="https://github.com/${REPO}/actions/runs/${RUN_ID}"
 
           cat > /tmp/mail.txt << MAILEOF
           From: ${GMAIL_USER}
           To: eric.garrido@uchile.cl
           Subject: UchileAyuda - Nuevo APK generado
           MIME-Version: 1.0
-          Content-Type: multipart/mixed; boundary="boundary123"
-
-          --boundary123
           Content-Type: text/plain
 
           Se genero un nuevo APK de UchileAyuda.
 
-          --boundary123
-          Content-Type: application/vnd.android.package-archive
-          Content-Transfer-Encoding: base64
-          Content-Disposition: attachment; filename="${APK_NAME}"
+          Descargalo aqui:
+          ${LINK}
 
-          ${APK_BASE64}
-          --boundary123--
+          (En la pagina, busca la seccion "Artifacts" y descarga "app-release")
           MAILEOF
 
           curl --ssl-reqd \
