@@ -16,13 +16,16 @@ import { Header } from "../components/Header";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MetricCard } from "../components/MetricCard";
 import api from "../services/api";
+import { FloatingButton } from "../components/FloatingButton";
 
 /* ---------------- MAPA FILTRO → STATUS_ID ---------------- */
 const filterToStatusId: Record<string, number> = {
-  pendientes: 1,
-  proceso: 2,
-  cerradas: 3,
-  anuladas: 4,
+  mis_solicitudes: 1,
+  colaboraciones: 2,
+  observadas: 3,
+  pendientes: 4,
+  cerradas: 5,
+  anuladas: 6,
 };
 
 export default function DashboardScreen() {
@@ -38,10 +41,12 @@ export default function DashboardScreen() {
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
 
   const [metrics, setMetrics] = useState({
-    openRequests: 0,
-    inProgress: 0,
-    closedRequests: 0,
-    overdueRequests: 0,
+    myRequests: 0,      // Mis solicitudes
+    collaborations: 0,  // Colaboraciones
+    observed: 0,        // Observadas
+    pending: 0,         // Pendientes
+    closed: 0,          // Cerradas
+    cancelled: 0,       // Anuladas
   });
 
   /* ---------------- LOAD TENANTS ---------------- */
@@ -55,7 +60,54 @@ export default function DashboardScreen() {
     }
   };
 
-  /* ---------------- LOAD TICKETS ---------------- */
+  /* ---------------- LOAD METRICS ---------------- */
+  const loadMetrics = async (filter: string | null = null) => {
+    try {
+      setLoading(true);
+
+      const token = await AsyncStorage.getItem("token");
+      const tenantStored = await AsyncStorage.getItem("tenant_id");
+
+      setTenant(tenantStored);
+
+      if (!token || !tenantStored) {
+        console.warn("❌ Falta token o tenant_id en AsyncStorage");
+        return;
+      }
+
+      const params: Record<string, any> = { per_page: 50 };
+      if (filter && filterToStatusId[filter]) {
+        params.status_id = filterToStatusId[filter];
+      }
+
+      const response = await api.get('/tickets/counts', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "X-Tenant": tenantStored,
+        },
+        params,
+      });
+
+      const data = response.data;
+      const counts = data?.data ?? {};
+
+      setMetrics({
+        myRequests: counts.mis_solicitudes ?? 0,
+        collaborations: counts.colaboraciones ?? 0,
+        observed: counts.observadas ?? 0,
+        pending: counts.pendientes ?? 0,
+        closed: counts.cerrados ?? 0,
+        cancelled: counts.anulados ?? 0,
+      });
+
+    } catch (e) {
+      console.error("❌ ERROR TICKETS:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* ---------------- LOAD TICKETS---------------- */
   const loadTickets = async (filter: string | null = null) => {
     try {
       setLoading(true);
@@ -75,23 +127,15 @@ export default function DashboardScreen() {
         params.status_id = filterToStatusId[filter];
       }
 
-      const response = await api.get('/tickets', {
+      const response = await api.get('/tickets/mis/solicitudes', {
         headers: {
           Authorization: `Bearer ${token}`,
           "X-Tenant": tenantStored,
         },
         params,
       });
-
       const data = response.data;
-      const counts = data?.meta?.counts ?? {};
-
-      setMetrics({
-        openRequests: counts.bandeja_entrada ?? 0,
-        inProgress: counts.en_proceso ?? 0,
-        closedRequests: counts.cerrados ?? 0,
-        overdueRequests: counts.anulados ?? 0,
-      });
+      console.log('Tikcets', data)
 
       setTickets(data?.data ?? []);
     } catch (e) {
@@ -101,11 +145,15 @@ export default function DashboardScreen() {
     }
   };
 
+  const [userName, setUserName] = useState<string | null>(null);
+
   /* Cada vez que la pantalla toma foco, recarga tenants + tickets */
   useFocusEffect(
     useCallback(() => {
       loadTenants();
-      loadTickets(activeFilter);
+      loadTickets();
+      loadMetrics(activeFilter);
+      AsyncStorage.getItem("user_name").then(setUserName); // ← agregar
     }, [activeFilter])
   );
 
@@ -140,7 +188,7 @@ export default function DashboardScreen() {
       // Resetear filtros y recargar con el nuevo tenant
       setActiveFilter(null);
       setShowAll(false);
-      await loadTickets(null);
+      await loadMetrics(null);
 
     } catch (e: any) {
       console.error("❌ Error cambiando tenant:", e);
@@ -153,15 +201,12 @@ export default function DashboardScreen() {
   };
 
   const handleFilterPress = (filter: string) => {
-    const nuevoFiltro = activeFilter === filter ? null : filter;
-    setActiveFilter(nuevoFiltro);
-    setShowAll(false);
-    loadTickets(nuevoFiltro);
+    navigation.navigate("Solicitudes", { filter });
   };
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await loadTickets(activeFilter);
+    await loadMetrics(activeFilter);
     setIsRefreshing(false);
   };
 
@@ -174,10 +219,16 @@ export default function DashboardScreen() {
     return `${day}-${month}-${year}`;
   };
 
+  const handleOpenList = (type: string) => {
+    navigation.navigate("RequestsList", {
+      type,
+    });
+  };
+
   /* ---------------- TÍTULO SECCIÓN ---------------- */
   const sectionTitle = activeFilter
     ? activeFilter.charAt(0).toUpperCase() + activeFilter.slice(1)
-    : "Solicitudes";
+    : "Recientes";
 
   /* ---------------- RENDER ---------------- */
   return (
@@ -193,6 +244,7 @@ export default function DashboardScreen() {
         onLogout={logout}
         tenants={tenants}
         onChangeTenant={handleChangeTenant}
+        user={userName}
       />
 
       <ScrollView
@@ -205,47 +257,77 @@ export default function DashboardScreen() {
           />
         }
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>Inicio</Text>
-        </View>
 
         {/* METRICS */}
         <View style={styles.metricsContainer}>
           <View style={styles.metricsRow}>
             <MetricCard
-              label="Pendientes"
-              value={metrics.openRequests}
+              label="Mis Solicitudes"
+              value={metrics.myRequests}
               iconName="file-text"
-              color="#3b82f6"
-              active={activeFilter === "pendientes"}
-              onPress={() => handleFilterPress("pendientes")}
+              iconNameChevron="chevron-right"
+              color="#155dfc"
+              colorChevron="#64748b"
+              onPress={() => handleFilterPress("mis_solicitudes")}
+              position="topLeft"
             />
             <MetricCard
-              label="Proceso"
-              value={metrics.inProgress}
-              iconName="clock"
-              color="#f59e0b"
-              active={activeFilter === "proceso"}
-              onPress={() => handleFilterPress("proceso")}
+              label="Colaboraciones"
+              value={metrics.collaborations}
+              iconName="users"
+              iconNameChevron="chevron-right"
+              color="#009689"
+              colorChevron="#64748b"
+              onPress={() => handleFilterPress("colaboraciones")}
+              position="topRight"
             />
+
           </View>
           <View style={styles.metricsRow}>
             <MetricCard
-              label="Anuladas"
-              value={metrics.overdueRequests}
-              iconName="alert-circle"
-              color="#dc2626"
-              active={activeFilter === "anuladas"}
-              onPress={() => handleFilterPress("anuladas")}
+              label="Observadas"
+              value={metrics.observed}
+              iconName="eye"
+              iconNameChevron="chevron-right"
+              color="#45556c"
+              colorChevron="#64748b"
+              onPress={() => handleFilterPress("observadas")}
+              position="middle"
             />
             <MetricCard
-              label="Cerradas"
-              value={metrics.closedRequests}
-              iconName="check-circle"
-              color="#10b981"
-              active={activeFilter === "cerradas"}
-              onPress={() => handleFilterPress("cerradas")}
+              label="Pendientes"
+              value={metrics.pending}
+              iconName="clock"
+              iconNameChevron="chevron-right"
+              color="#e47a0e"
+              colorChevron="#64748b"
+              onPress={() => handleFilterPress("pendientes")}
+              position="middle"
             />
+
+          </View>
+          <View style={styles.metricsRow}>
+            <MetricCard
+              label="Cerradas"
+              value={metrics.closed}
+              iconName="check-circle"
+              iconNameChevron="chevron-right"
+              color="#10b981"
+              colorChevron="#64748b"
+              onPress={() => handleFilterPress("cerradas")}
+              position="bottomLeft"
+            />
+            <MetricCard
+              label="Anuladas"
+              value={metrics.cancelled}
+              iconName="x-circle"
+              iconNameChevron="chevron-right"
+              color="#ec003e"
+              colorChevron="#64748b"
+              onPress={() => handleFilterPress("anuladas")}
+              position="bottomRight"
+            />
+
           </View>
         </View>
 
@@ -268,7 +350,7 @@ export default function DashboardScreen() {
                 No hay solicitudes{activeFilter ? ` en "${sectionTitle}"` : ""}
               </Text>
             ) : (
-              (showAll ? tickets : tickets.slice(0, 3)).map((request, index) => (
+              (showAll ? tickets : tickets.slice(0, 5)).map((request, index) => (
                 <Animatable.View
                   key={request.id || index}
                   animation="fadeInUp"
@@ -283,9 +365,8 @@ export default function DashboardScreen() {
                     assignedUser={request.assigned_user?.name}
                     assignedGroup={request.assigned_group?.name}
                     createdAt={formatDate(request.created_at)}
-                    slaStatus="ok"
-                    slaLabel="--"
-                    slaCommen={request.sla}
+                    participationLabel={request.participation_type || "Sin participante"}
+                    sla={request.sla}
                     updateAt={formatDate(request.updated_at)}
                     onClick={() => handleRequestClick(request)}
                   />
@@ -295,6 +376,7 @@ export default function DashboardScreen() {
           </>
         )}
       </ScrollView>
+      {/*<FloatingButton /> */}
     </View>
   );
 }
@@ -303,7 +385,7 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f1f5f9",
+    backgroundColor: "#f8f9fb",
   },
   contentContainer: {
     padding: 16,
@@ -319,17 +401,16 @@ const styles = StyleSheet.create({
   },
   metricsContainer: {
     marginBottom: 16,
-    gap: 10,
   },
   metricsRow: {
     flexDirection: "row",
-    gap: 10,
   },
   metricCard: {
     flex: 1,
     backgroundColor: "#fff",
     borderRadius: 12,
     padding: 14,
+    flexDirection: "row",
     alignItems: "center",
     shadowColor: "#000",
     shadowOpacity: 0.05,
@@ -344,7 +425,10 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 8,
+    marginRight: 10,
+  },
+  metricTextContainer: {
+    flex: 1,
   },
   metricValue: {
     fontSize: 20,
@@ -368,8 +452,8 @@ const styles = StyleSheet.create({
     color: "#1e293b",
   },
   seeAllButton: {
-    fontSize: 13,
-    color: "#2563eb",
+    fontSize: 12,
+    color: "#1e40af",
   },
   emptyText: {
     textAlign: "center",

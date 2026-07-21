@@ -1,33 +1,51 @@
-import React, { useEffect, useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
-  TextInput,
-  TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
   ScrollView,
   RefreshControl,
+  TouchableOpacity,
+  StatusBar,
 } from "react-native";
-import * as Animatable from 'react-native-animatable';
+import * as Animatable from "react-native-animatable";
+import Icon from "react-native-vector-icons/Feather";
 import { RequestCard } from "../components/RequestCard";
-import { useNavigation } from "@react-navigation/native";
-import { Header } from "../components/Header";
+import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../services/api";
 
+/* ---------------- MAPA FILTRO → ENDPOINT ---------------- */
+const filterToEndpoint: Record<string, { path: string; title: string }> = {
+  mis_solicitudes: { path: "/tickets/mis/solicitudes", title: "Mis Solicitudes" },
+  colaboraciones: { path: "/tickets/mis/colaboraciones", title: "Colaboraciones" },
+  observadas: { path: "/tickets/mis/observadas", title: "Observadas" },
+  pendientes: { path: "/tickets/bandeja/pendientes", title: "Pendientes" },
+  cerradas: { path: "/tickets/mis/cerradas", title: "Cerradas" },
+  anuladas: { path: "/tickets/mis/anuladas", title: "Anuladas" },
+};
+
 export default function RequestsListScreen() {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const { logout } = useAuth();
+
+  const filter = route.params?.filter ?? "mis_solicitudes";
+  const endpoint = filterToEndpoint[filter] ?? filterToEndpoint.mis_solicitudes;
+
   const [tickets, setTickets] = useState<any[]>([]);
   const [tenant, setTenant] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const loadTickets = async () => {
     try {
       setLoading(true);
+      setErrorMsg(null);
 
       const token = await AsyncStorage.getItem("token");
       const tenantStored = await AsyncStorage.getItem("tenant_id");
@@ -39,31 +57,38 @@ export default function RequestsListScreen() {
         return;
       }
 
-      const response = await api.get('/tickets/mis/solicitudes', {
+      const response = await api.get(endpoint.path, {
         headers: {
           Authorization: `Bearer ${token}`,
           "X-Tenant": tenantStored,
         },
+        params: { per_page: 50 },
       });
 
       const data = response.data;
-
+      console.log('pl', data)
       setTickets(data?.data ?? []);
-    } catch (e) {
-      console.log("❌ ERROR TICKETS:", e);
+    } catch (e: any) {
+      console.log("❌ ERROR TICKETS:", e?.response?.data ?? e);
+      const mensaje =
+        e?.response?.data?.message ?? e?.message ?? "Error cargando tickets";
+      setTickets([]);
+      setErrorMsg(mensaje);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    loadTickets();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadTickets();
+      AsyncStorage.getItem("user_name").then(setUserName);
+    }, [filter])
+  );
 
-  // Función para manejar el refresh
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await loadTickets();  // Actualiza los comentarios
+    await loadTickets();
     setIsRefreshing(false);
   };
 
@@ -73,39 +98,46 @@ export default function RequestsListScreen() {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-
     const day = String(date.getDate()).padStart(2, "0");
     const month = String(date.getMonth() + 1).padStart(2, "0");
     const year = date.getFullYear();
-
     return `${day}-${month}-${year}`;
   };
 
   return (
     <View style={styles.container}>
-
       {/* HEADER */}
-      <Header tenant={tenant} onLogout={logout} />
+      <View style={styles.headerTwo}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Icon name="arrow-left" size={22} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitleTwo}>{endpoint.title}</Text>
+      </View>
 
-      <ScrollView contentContainerStyle={styles.contentContainer} refreshControl={
-        <RefreshControl
-          refreshing={isRefreshing}
-          onRefresh={handleRefresh}
-          colors={["#2563eb"]}
-        />
-      }>
-
-        <View style={styles.header}>
-          <Text style={styles.title}>Mis Solicitudes</Text>
-        </View>
-        {/* LOADING */}
+      <ScrollView
+        contentContainerStyle={styles.contentContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            colors={["#2563eb"]}
+          />
+        }
+      >
         {loading ? (
           <ActivityIndicator size="large" color="#007aff" />
+        ) : errorMsg ? (
+          <View style={styles.errorContainer}>
+            <Icon name="alert-circle" size={40} color="#ef4444" />
+            <Text style={styles.errorText}>{errorMsg}</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={handleRefresh}>
+              <Text style={styles.retryText}>Reintentar</Text>
+            </TouchableOpacity>
+          </View>
         ) : tickets.length === 0 ? (
-          <View style={{ alignItems: "center", marginTop: 20 }}>
-            <Text style={{ color: "#64748b", fontSize: 14 }}>
-              Sin registros
-            </Text>
+          <View style={styles.emptyContainer}>
+            <Icon name="inbox" size={40} color="#94a3b8" />
+            <Text style={styles.emptyText}>Sin registros</Text>
           </View>
         ) : (
           <>
@@ -124,9 +156,8 @@ export default function RequestsListScreen() {
                   assignedUser={request.assigned_user?.name}
                   assignedGroup={request.assigned_group?.name}
                   createdAt={formatDate(request.created_at)}
-                  slaStatus="ok"
-                  slaLabel="--"
-                  slaCommen={request.sla}
+                  participationLabel={request.participation_type || "Sin participante"}
+                  sla={request.sla}
                   updateAt={formatDate(request.updated_at)}
                   onClick={() => handleRequestClick(request)}
                 />
@@ -145,57 +176,50 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f8fafc",
   },
-
-  header: {
-    padding: 4,
-  },
-
   contentContainer: {
     padding: 16,
   },
-
-  title: {
-    fontSize: 22,
-    fontWeight: "600",
-    marginBottom: 12,
-    color: "#0f172a",
-  },
-
-  searchBox: {
+  headerTwo: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f1f5f9",
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    marginBottom: 10,
+    padding: 16,
+    backgroundColor: "#fff",
+    marginTop: StatusBar.currentHeight || 44,
   },
-
-  input: {
-    flex: 1,
-    padding: 10,
-    color: "#0f172a",
-  },
-
-  list: {
-    paddingTop: 8,
-  },
-
-  emptyContainer: {
-    marginTop: 40,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  emptyTitle: {
-    marginTop: 10,
-    fontSize: 16,
+  headerTitleTwo: {
+    fontSize: 20,
     fontWeight: "600",
-    color: "#334155",
+    marginLeft: 20,
   },
-
-  emptySubtitle: {
-    marginTop: 4,
-    fontSize: 13,
-    color: "#94a3b8",
+  errorContainer: {
+    alignItems: "center",
+    marginTop: 40,
+    paddingHorizontal: 20,
+  },
+  errorText: {
+    color: "#ef4444",
+    fontSize: 14,
+    textAlign: "center",
+    marginTop: 12,
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: "#3b82f6",
+    borderRadius: 8,
+  },
+  retryText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  emptyContainer: {
+    alignItems: "center",
+    marginTop: 40,
+  },
+  emptyText: {
+    color: "#64748b",
+    fontSize: 14,
+    marginTop: 12,
   },
 });

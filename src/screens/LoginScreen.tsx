@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -14,26 +14,133 @@ import { GoogleSignin, statusCodes } from "@react-native-google-signin/google-si
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ENV } from "../config/env";
 import api from "../services/api";
-import { ErrorBadge } from '../components/ErrorBadge';
-import messaging from "@react-native-firebase/messaging"; // 👈 agregado
+import { ErrorBadge } from "../components/ErrorBadge";
+import messaging from "@react-native-firebase/messaging";
+import ReactNativeBiometrics from "react-native-biometrics";
+import Icon from "react-native-vector-icons/Ionicons";
+import { useFocusEffect } from "@react-navigation/native";
+import { APP_VERSION } from "../config/version";
 
 interface LoginScreenProps {
   onLogin: (payload: any) => void;
 }
+
+const rnBiometrics = new ReactNativeBiometrics({
+  allowDeviceCredentials: true,
+});
 
 export function LoginScreen({ onLogin }: LoginScreenProps) {
   const [rut, setRut] = useState("");
   const [rutValid, setRutValid] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [hasSavedSession, setHasSavedSession] = useState(false);
+  const [biometryType, setBiometryType] = useState<string | null>(null);
 
-  useEffect(() => {
-    GoogleSignin.configure({
-      webClientId: ENV.GOOGLE_CLIENT_ID,
-      iosClientId: ENV.IOS_CLIENT_ID,
-    });
-  }, []);
+  /* ---------------- FOCUS EFFECT ---------------- */
+  useFocusEffect(
+    React.useCallback(() => {
+      GoogleSignin.configure({
+        webClientId: ENV.GOOGLE_CLIENT_ID,
+        iosClientId: ENV.IOS_CLIENT_ID,
+      });
+      checkBiometric();
+    }, [])
+  );
 
+  /* ---------------- BIOMETRÍA ---------------- */
+  const checkBiometric = async () => {
+    try {
+      const result = await rnBiometrics.isSensorAvailable();
+      console.log("🔐 Biometría resultado:", JSON.stringify(result));
+
+      const hasBiometric = result.available;
+
+      // Con allowDeviceCredentials, simplePrompt funciona con PIN/patrón
+      // aunque isSensorAvailable diga available: false
+      setBiometricAvailable(true);
+      setBiometryType(result.biometryType ?? null);
+
+      const savedToken = await AsyncStorage.getItem("saved_token");
+      const savedTenant = await AsyncStorage.getItem("saved_tenant_id");
+      const hasSession = !!(savedToken && savedTenant);
+      setHasSavedSession(hasSession);
+
+      //console.log("🔐 Sesión guardada:", hasSession);
+      //console.log("🔐 Sensor biométrico:", hasBiometric);
+
+      if (hasSession) {
+        handleBiometricLogin();
+      }
+    } catch (e) {
+      console.log("❌ Error verificando biometría:", e);
+      setBiometricAvailable(false);
+    }
+  };
+
+  const handleBiometricLogin = async () => {
+    try {
+      const { success } = await rnBiometrics.simplePrompt({
+        promptMessage: "Desbloquea para iniciar sesión",
+        cancelButtonText: "Cancelar",
+      });
+
+      if (!success) return;
+
+      setLoading(true);
+      setError("");
+
+      const token = await AsyncStorage.getItem("saved_token");
+      const tenantId = await AsyncStorage.getItem("saved_tenant_id");
+      const userName = await AsyncStorage.getItem("user_name");
+
+      if (!token || !tenantId) {
+        setError("Sesión expirada, inicia sesión nuevamente");
+        await AsyncStorage.multiRemove(["saved_token", "saved_tenant_id"]);
+        setHasSavedSession(false);
+        return;
+      }
+
+      // Verificar que el token siga válido
+      const meResponse = await api.get("/mobile/me", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const meData = meResponse.data;
+
+      await AsyncStorage.setItem("token", token);
+      await AsyncStorage.setItem("tenant_id", tenantId);
+
+      onLogin({
+        requiresTenantSelection: false,
+        token,
+        user: { ...meData, name: userName },
+        tenant_id: tenantId,
+      });
+    } catch (e: any) {
+      console.log("❌ Biometric login falló:", e);
+
+      // Si el dispositivo no tiene ningún bloqueo configurado
+      if (
+        e?.message?.includes("No enrolled") ||
+        e?.message?.includes("no hardware") ||
+        e?.message?.includes("No fingerprints") ||
+        e?.message?.includes("BIOMETRIC_ERROR")
+      ) {
+        setBiometricAvailable(false);
+        return;
+      }
+
+      await AsyncStorage.multiRemove(["saved_token", "saved_tenant_id"]);
+      setHasSavedSession(false);
+      setError("Sesión expirada, inicia sesión con Google");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* ---------------- LOGIN GOOGLE ---------------- */
   const handleGoogleLogin = async () => {
     if (!rutValid) {
       setError("RUT inválido");
@@ -44,7 +151,6 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
       setError("");
       setLoading(true);
 
-      // Limpiar sesión anterior ANTES de todo
       await AsyncStorage.removeItem("token");
       await AsyncStorage.removeItem("tenant_id");
 
@@ -59,7 +165,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
         return;
       }
 
-      const loginResponse = await api.post('/mobile/auth/google', {
+      const loginResponse = await api.post("/mobile/auth/google", {
         id_token: idToken,
         rut,
       });
@@ -72,20 +178,22 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
       }
 
       /* ---------------- MULTI TENANT ---------------- */
-      // El backend indica que el usuario pertenece a más de un tenant.
-      // No se puede generar token aún — se necesita que el usuario elija.
-      // El FCM token se guarda en TenantSelectionScreen una vez que se obtiene el JWT.
       if (loginData.requires_tenant_selection) {
+        await AsyncStorage.setItem(
+          "user_name",
+          loginData.user?.name ?? loginData.user?.email ?? "Usuario"
+        );
+
         onLogin({
           requiresTenantSelection: true,
           loginTicket: loginData.login_ticket,
           tenants: loginData.tenants,
+          user: loginData.user,
         });
         return;
       }
 
       /* ---------------- SINGLE TENANT ---------------- */
-      // El backend ya sabe a qué tenant pertenece el usuario → devuelve token directo.
       const token = loginData?.token ?? loginData?.access_token;
 
       if (!token) {
@@ -94,8 +202,12 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
       }
 
       await AsyncStorage.setItem("token", token);
+      await AsyncStorage.setItem(
+        "user_name",
+        loginData.user?.name ?? loginData.user?.email ?? "Usuario"
+      );
 
-      const meResponse = await api.get('/mobile/me', {
+      const meResponse = await api.get("/mobile/me", {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -105,33 +217,38 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
         await AsyncStorage.setItem("tenant_id", String(meData.tenant_id));
       }
 
-      // 👇 Guardar FCM token — aquí el JWT ya está disponible en la variable `token`
+      // Guardar FCM token
       try {
         const fcmToken = await messaging().getToken();
-        console.log("🔑 FCM Token (single tenant):", fcmToken);
 
-        await api.post('/mobile/fcm-token', {
-          token: fcmToken,
-          platform: 'android',
-          tenant_id: meData?.tenant_id,
-        }, {
-          headers: {
-            Authorization: `Bearer ${token}`, // 👈 JWT directo, no desde AsyncStorage
+        await api.post(
+          "/mobile/fcm-token",
+          {
+            token: fcmToken,
+            platform: "android",
+            tenant_id: meData?.tenant_id,
           },
-        });
-
-        console.log("✅ FCM token guardado (single tenant)");
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
       } catch (fcmError) {
         console.log("❌ Error guardando FCM token (single tenant):", fcmError);
       }
 
+      // Guardar credenciales para biometría futura
+      await AsyncStorage.setItem("saved_token", token);
+      await AsyncStorage.setItem("saved_tenant_id", String(meData?.tenant_id));
+      console.log("🔐 GUARDADO para biometría - token:", token ? "✅" : "❌", "tenant:", meData?.tenant_id);
+
       onLogin({
         requiresTenantSelection: false,
         token,
-        user: meData,
+        user: { ...meData, name: loginData.user?.name },
         tenant_id: meData?.tenant_id,
       });
-
     } catch (e: any) {
       if (e?.code === statusCodes.SIGN_IN_CANCELLED) return;
 
@@ -145,6 +262,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
     }
   };
 
+  /* ---------------- RENDER ---------------- */
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -174,7 +292,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           {error ? <ErrorBadge message={error} /> : null}
 
           <TouchableOpacity
-            style={[styles.googleButton, loading && styles.googleButtonDisabled]}
+            style={[styles.googleButton, loading && styles.buttonDisabled]}
             onPress={handleGoogleLogin}
             disabled={loading}
           >
@@ -186,14 +304,46 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
               {loading ? "Iniciando sesión..." : "Continuar con Google"}
             </Text>
           </TouchableOpacity>
+
+          {/* BOTÓN DESBLOQUEO RÁPIDO */}
+          {biometricAvailable && hasSavedSession && (
+            <TouchableOpacity
+              style={[styles.biometricButton, loading && styles.buttonDisabled]}
+              onPress={handleBiometricLogin}
+              disabled={loading}
+            >
+              <Icon
+                name={
+                  biometryType === "FaceID"
+                    ? "scan-outline"
+                    : biometryType === "Biometrics"
+                      ? "finger-print-outline"
+                      : "lock-closed-outline"
+                }
+                size={24}
+                color="#007aff"
+              />
+              <Text style={styles.biometricText}>
+                {biometryType === "FaceID"
+                  ? "Iniciar con Face ID"
+                  : biometryType === "Biometrics"
+                    ? "Iniciar con huella"
+                    : "Desbloqueo rápido"}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        <Text style={styles.footer}>Sistema de gestión · Universidad de Chile</Text>
+        <Text style={styles.footer}>
+          Sistema de gestión · Universidad de Chile
+        </Text>
+        <Text style={styles.version}>
+          v{APP_VERSION}
+        </Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
-
 
 /* ---------------- STYLES ---------------- */
 const styles = StyleSheet.create({
@@ -247,7 +397,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 15,
   },
-  googleButtonDisabled: {
+  biometricButton: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#007aff",
+    marginTop: 12,
+  },
+  biometricText: {
+    color: "#007aff",
+    marginLeft: 8,
+    fontWeight: "500",
+  },
+  buttonDisabled: {
     opacity: 0.6,
   },
   googleText: {
@@ -264,5 +429,11 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     resizeMode: "contain",
+  },
+  version: {
+    marginTop: 8,
+    fontSize: 10,
+    color: "#bbb",
+    textAlign: "center",
   },
 });

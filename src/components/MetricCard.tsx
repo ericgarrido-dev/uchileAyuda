@@ -1,31 +1,60 @@
 import React from "react";
-import { TouchableOpacity, View, Text, StyleSheet } from "react-native";
+import { TouchableOpacity, View, Text, StyleSheet, ViewStyle } from "react-native";
 import Icon from "react-native-vector-icons/Feather";
+
+type Position = "topLeft" | "topRight" | "bottomLeft" | "bottomRight" | "middle";
 
 interface MetricCardProps {
   label: string;
   value: number;
   iconName: string;
+  iconNameChevron: string;
   color: string;
+  colorChevron: string;
   active?: boolean;
   onPress: () => void;
+  position?: Position;
 }
 
-export function MetricCard({ label, value, iconName, color, onPress, active }: MetricCardProps) {
+const RADIUS = 16;
+
+const borderRadiusMap: Record<Position, ViewStyle> = {
+  topLeft: {
+    borderTopLeftRadius: RADIUS,
+  },
+  topRight: {
+    borderTopRightRadius: RADIUS,
+  },
+  middle: {},
+  bottomLeft: {
+    borderBottomLeftRadius: RADIUS,
+  },
+  bottomRight: {
+    borderBottomRightRadius: RADIUS,
+  },
+};
+
+export function MetricCard({ label, value, iconName, iconNameChevron, color, colorChevron, onPress, active, position }: MetricCardProps) {
   return (
     <TouchableOpacity
       style={[
         styles.metricCard,
-        active && { borderWidth: 2, borderColor: color },
+        position && borderRadiusMap[position],
+        active && { borderColor: color },
       ]}
       onPress={onPress}
       activeOpacity={0.8}
     >
-      <View style={[styles.iconBox, { backgroundColor: color }]}>
-        <Icon name={iconName} size={18} color="#fff" />
+      <View style={[styles.iconBox, { backgroundColor: color + "20" }]}>
+        <Icon name={iconName} size={20} color={color} />
       </View>
-      <Text style={styles.metricValue}>{value}</Text>
-      <Text style={styles.metricLabel}>{label}</Text>
+      <View style={styles.textContainer}>
+        <Text style={styles.metricLabel}>{label}</Text>
+        <Text style={styles.metricValue}>{value}</Text>
+      </View>
+      <View>
+        <Icon name={iconNameChevron} size={18} color={colorChevron} />
+      </View>
     </TouchableOpacity>
   );
 }
@@ -34,23 +63,24 @@ const styles = StyleSheet.create({
   metricCard: {
     flex: 1,
     backgroundColor: "#fff",
-    borderRadius: 12,
+    borderRadius: 0,
     padding: 14,
+    flexDirection: "row",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+    borderWidth: 0.5,
+    borderColor: "#e2e8f0",
     elevation: 2,
-    borderWidth: 2,
-    borderColor: "transparent",
   },
   iconBox: {
     width: 36,
     height: 36,
-    borderRadius: 10,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 8,
+    marginRight: 10,
+  },
+  textContainer: {
+    flex: 1,
   },
   metricValue: {
     fontSize: 20,

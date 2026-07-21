@@ -4,7 +4,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
-import Icon from "react-native-vector-icons/Feather";
+import Icon from "react-native-vector-icons/Ionicons";
 import DashboardScreen from "../src/screens/DashboardScreen";
 import StatsScreen from "../src/screens/StatsScreen";
 import RequestsListScreen from "../src/screens/RequestsListScreen";
@@ -44,16 +44,16 @@ function TabNavigator() {
         tabBarIcon: ({ color }) => {
           let iconName = "";
           switch (route.name) {
-            case "Inicio": iconName = "home"; break;
-            case "Mis Solicitudes": iconName = "file-text"; break;
-            case "Estadisticas": iconName = "bar-chart-2"; break;
+            case "Inicio": iconName = "home-outline"; break;
+            case "Solicitudes": iconName = "document-text-outline"; break;
+            case "Estadisticas": iconName = "bar-chart-outline"; break;
           }
-          return <Icon name={iconName} size={18} color={color} />;
+          return <Icon name={iconName} size={22} color={color} />;
         },
       })}
     >
       <Tab.Screen name="Inicio" component={DashboardScreen} />
-      <Tab.Screen name="Mis Solicitudes" component={RequestsListScreen} />
+      <Tab.Screen name="Solicitudes" component={RequestsListScreen} />
       <Tab.Screen name="Estadisticas" component={StatsScreen} />
     </Tab.Navigator>
   );
@@ -61,10 +61,6 @@ function TabNavigator() {
 
 /* ---------------- HELPERS FCM ---------------- */
 
-/**
- * Navega a RequestDetail de forma segura.
- * Si el navegador no está listo, reintenta hasta 5 veces cada 300ms.
- */
 const navegarATicket = (
   navigationRef: React.MutableRefObject<any>,
   ticketId: string,
@@ -82,11 +78,6 @@ const navegarATicket = (
     }
 
     try {
-      console.log("🧭 Navegando al ticket:", ticketId);
-
-      const state = navigationRef.current.getRootState();
-    console.log("🔍 Estado completo:", JSON.stringify(state, null, 2));
-      // 👇 reset en vez de navigate — fuerza el stack correcto
       navigationRef.current.reset({
         index: 1,
         routes: [
@@ -97,7 +88,6 @@ const navegarATicket = (
           },
         ],
       });
-
     } catch (e: any) {
       console.log("❌ Error detallado:", e?.message, e?.stack);
     }
@@ -106,10 +96,6 @@ const navegarATicket = (
   delay > 0 ? setTimeout(go, delay) : go();
 };
 
-/**
- * Guarda el FCM token en el backend asociado al user_id de la tabla users de Laravel.
- * Por ahora solo loguea el payload para verificar en consola Firebase.
- */
 const guardarFCMToken = async (userId?: number) => {
   try {
     const permiso = await messaging().requestPermission();
@@ -123,15 +109,6 @@ const guardarFCMToken = async (userId?: number) => {
     }
 
     const fcmToken = await messaging().getToken();
-
-    // 👇 Payload completo que se enviará al backend cuando esté listo
-    console.log("📦 Payload que se enviará al backend:", JSON.stringify({
-      user_id: userId,
-      fcm_token: fcmToken,
-    }, null, 2));
-
-    console.log("🔑 FCM TOKEN:", fcmToken);
-    console.log("👤 USER ID (tabla users Laravel):", userId);
 
     // ✅ Descomentar cuando el backend tenga el endpoint listo:
     // const authToken = await AsyncStorage.getItem("token");
@@ -149,13 +126,8 @@ const guardarFCMToken = async (userId?: number) => {
   }
 };
 
-/**
- * Actualiza el FCM token en el backend cuando Firebase lo rota.
- */
 const actualizarFCMToken = async (nuevoToken: string) => {
   try {
-    console.log("🔄 FCM token rotado:", nuevoToken);
-
     // ✅ Descomentar cuando el backend tenga el endpoint listo:
     // const authToken = await AsyncStorage.getItem("token");
     // if (!authToken) return;
@@ -207,17 +179,14 @@ export default function App() {
   useEffect(() => {
     if (!isLoggedIn || !selectedTenant) return;
 
-    // 👇 Log completo del usuario para verificar campos disponibles
     console.log("✅ SESIÓN COMPLETA");
     console.log("👤 User completo:", JSON.stringify(user, null, 2));
     console.log("👤 User ID (Laravel):", user?.id);
     console.log("👤 User email:", user?.email);
     console.log("🏢 Tenant seleccionado:", selectedTenant);
 
-    // Pasa el user.id (PK de la tabla users de Laravel)
     guardarFCMToken(user?.id);
 
-    // 🔔 App en FOREGROUND: mostrar Alert con botón para navegar
     const unsubscribeForeground = messaging().onMessage(async (remoteMessage) => {
       console.log("🔔 Foreground:", remoteMessage);
       const ticketId = remoteMessage.data?.ticket_id;
@@ -230,10 +199,7 @@ export default function App() {
             text: "Ver ticket",
             onPress: () => {
               if (ticketId) {
-                console.log("🔔 ticket:", ticketId);
                 navegarATicket(navigationRef, String(ticketId));
-              } else {
-                console.warn("⚠️ No llegó ticket_id en la notificación foreground");
               }
             },
           },
@@ -242,18 +208,14 @@ export default function App() {
       );
     });
 
-    // 📲 App en BACKGROUND: usuario toca la notificación
     const unsubscribeBackground = messaging().onNotificationOpenedApp((remoteMessage) => {
       console.log("📲 Background tap:", remoteMessage);
       const ticketId = remoteMessage.data?.ticket_id;
       if (ticketId) {
         navegarATicket(navigationRef, String(ticketId), 500);
-      } else {
-        console.warn("⚠️ No llegó ticket_id en la notificación background");
       }
     });
 
-    // 🔄 Token rotado por Firebase
     const unsubscribeRefresh = messaging().onTokenRefresh(actualizarFCMToken);
 
     return () => {
@@ -270,18 +232,20 @@ export default function App() {
     setTenants([]);
     setLoginTicket(null);
     setUser(null);
-    await AsyncStorage.multiRemove(["token", "tenant_id", "tenants", "login_ticket"]);
+    await AsyncStorage.multiRemove([
+      "token", "tenant_id", "tenants", "login_ticket",
+      // NO borrar "saved_token" ni "saved_tenant_id" para que biometría funcione
+    ]);
   };
 
   /* ---------------- HELPERS ---------------- */
-  // 👇 Se preserva tenant_user_id para poder identificar al usuario por tenant
   const mapTenants = (list: any[]) =>
     list.map((t: any, index: number) => ({
       id: t.tenant_id || String(index),
       name: t.tenant_id.toUpperCase(),
       domain: `${t.tenant_id}.ayuda.uchilefau.cl`,
       description: "Unidad institucional",
-      tenant_user_id: t.tenant_user_id, // 👈 PK del usuario en ese tenant
+      tenant_user_id: t.tenant_user_id,
     }));
 
   /* ---------------- RENDER ---------------- */
@@ -298,16 +262,12 @@ export default function App() {
                   <LoginScreen
                     {...props}
                     onLogin={async (data) => {
-                      // 👇 Ver todo lo que retorna el backend al hacer login
-                      console.log("📡 DATA LOGIN COMPLETA:", JSON.stringify(data, null, 2));
-                      console.log("👤 USER OBJECT:", JSON.stringify(data.user, null, 2));
-                      console.log("👤 USER ID:", data.user?.id);
-
                       if (data.requiresTenantSelection) {
                         const mapped = mapTenants(data.tenants || []);
 
                         await AsyncStorage.setItem("login_ticket", data.loginTicket);
                         await AsyncStorage.setItem("tenants", JSON.stringify(mapped));
+                        await AsyncStorage.setItem("user_name", data.user?.name ?? data.user?.email ?? "");
 
                         setTenants(mapped);
                         setLoginTicket(data.loginTicket);
@@ -320,6 +280,7 @@ export default function App() {
                       await AsyncStorage.setItem("tenants", JSON.stringify([]));
                       await AsyncStorage.setItem("token", data.token);
                       await AsyncStorage.setItem("tenant_id", data.tenant_id);
+                      await AsyncStorage.setItem("user_name", data.user?.name ?? data.user?.email ?? "");
 
                       setUser(data.user);
                       setSelectedTenant(data.tenant_id);
@@ -336,16 +297,19 @@ export default function App() {
               tenants={tenants}
               userName={user?.email || user?.name || "Usuario"}
               loginTicket={loginTicket!}
-              onSelectTenant={(tenantId) => {
-                // 👇 Buscar el tenant elegido y extraer su tenant_user_id
+              onSelectTenant={async (tenantId) => {
                 const tenantSeleccionado = tenants.find((t) => t.id === tenantId);
 
-                console.log("🏢 Tenant elegido:", tenantId);
-                console.log("👤 tenant_user_id del tenant elegido:", tenantSeleccionado?.tenant_user_id);
-
-                // Guardamos el user_id correspondiente al tenant seleccionado
                 setUser({ id: tenantSeleccionado?.tenant_user_id });
                 setSelectedTenant(tenantId);
+
+                // Guardar para biometría futura (multi-tenant)
+                const token = await AsyncStorage.getItem("token");
+                if (token) {
+                  await AsyncStorage.setItem("saved_token", token);
+                  await AsyncStorage.setItem("saved_tenant_id", tenantId);
+                  console.log("🔐 Credenciales guardadas para biometría (multi-tenant)");
+                }
               }}
               onLogout={handleLogout}
             />
